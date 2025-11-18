@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head> 
+<meta charset="UTF-8" />
+<title>Suivi Joueurs – Stade Français Paris</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<!-- Police moderne Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- CSS global -->
+<link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+<div class="app">
+
+<!-- HEADER STADE FRANÇAIS -->
+<header class="app-header">
+<div class="header-left">
+<div class="logo-raw">
+<img src="Image/SFP.png" alt="Stade Français" class="logo-raw-img">
+</div>
+
+<div class="header-title-block">
+<h1>Stade Français Paris</h1>
+<p>Suivi joueurs · Staff médical &amp; performance</p>
+</div>
+</div>
+
+<div class="header-right">
+<div class="header-stats">
+<div class="stat-card stat-available">
+<span class="stat-label">Disponibles</span>
+<span id="stat-disponibles" class="stat-value">0</span>
+</div>
+<div class="stat-card stat-injury">
+<span class="stat-label">Blessés / adaptés</span>
+<span id="stat-infirmerie" class="stat-value">0</span>
+</div>
+</div>
+</div>
+</header>
+
+<!-- MAIN LAYOUT -->
+<main class="app-main">
+
+<!-- PANEL GAUCHE : LISTE JOUEURS -->
+<section class="left-panel">
+<div class="filters">
+<div class="filters-main">
+<label for="filterSelect">Filtrer :</label>
+<select id="filterSelect">
+<option value="all">Tout l’effectif</option>
+<option value="available">Joueurs disponibles</option>
+<option value="injury">Joueurs blessés</option>
+</select>
+</div>
+<input type="text" id="searchInput" placeholder="Rechercher (nom, poste...)" autocomplete="off" />
+</div>
+
+<!-- Liste générée dynamiquement par app.js -->
+<div id="playersList" class="players-list"></div>
+</section>
+
+<!-- PANEL DROITE : FICHE JOUEUR DÉTAILLÉE -->
+<section class="right-panel">
+<div id="playerDetail" class="player-detail empty-state">
+<div class="empty-welcome">
+<img src="Image/SFP.png" class="empty-logo" alt="Logo Stade Français">
+<h2 class="empty-title">U21 Stade Français Paris</h2>
+<p class="empty-subtitle">Centre de suivi – Performance &amp; Médecine</p>
+<p class="empty-hint">Sélectionne un joueur dans la liste pour commencer.</p>
+</div>
+</div>
+</section>
+
+</main>
+</div>
+
+<!-- LOGIQUE JS -->
+<script src="app.js"></script>
+</body>
+</html>
