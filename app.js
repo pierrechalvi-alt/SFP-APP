@@ -1094,12 +1094,11 @@ function drawMorphoChart(canvas, history) {
 function renderGpsSection(detail, joueur) {
   const data = gpsData.filter((g) => g.joueurId === joueur.id);
   const card = document.createElement("div");
-  card.className = "section-card open";
+  card.className = "section-card open gps-section";
 
-  const historyId = `gps-history-${joueur.id}`;
-  const canvasId = `gps-canvas-${joueur.id}`;
+  const detailId = `gps-detail-${joueur.id}`;
 
-  if (data.length === 0) {
+  if (!data.length) {
     card.innerHTML = `
       <div class="section-header">
         <div class="section-header-left">
@@ -1109,7 +1108,7 @@ function renderGpsSection(detail, joueur) {
         <div class="section-toggle-icon">▶</div>
       </div>
       <div class="section-summary">
-        <div class="section-content">Pas de données GPS enregistrées pour ce joueur.</div>
+        <div class="section-content">Pas de données GPS pour ce joueur.</div>
       </div>
     `;
     detail.appendChild(card);
@@ -1120,83 +1119,149 @@ function renderGpsSection(detail, joueur) {
   const last = sortedByDate[sortedByDate.length - 1];
   const prev = sortedByDate.length > 1 ? sortedByDate[sortedByDate.length - 2] : null;
 
-  const byDateRows = sortedByDate
-    .map(
-      (d) => `
-    <tr>
-      <td>${d.date}</td>
-      <td>${d.totalDistance} m</td>
-      <td>${d.hsr} m</td>
-      <td>${d.sprint} m</td>
-      <td>${d.vmax ?? "-"} m/s</td>
-    </tr>`
-    )
-    .join("");
-
   card.innerHTML = `
     <div class="section-header">
       <div class="section-header-left">
         <div class="section-title-main">Performance GPS</div>
-        <div class="section-title-sub">Dernière séance ${last.date}</div>
+        <div class="section-title-sub">Dernière séance : ${last.date}</div>
       </div>
       <div class="section-toggle-icon">▶</div>
     </div>
     <div class="section-summary">
-      <div class="gps-cards">
-        <div class="info-card">
-          <div class="info-label">Distance totale</div>
-          <div class="info-value">
-            ${last.totalDistance} m
-            ${prev ? buildPerfTrendIcon(last.totalDistance, prev.totalDistance, true) : ""}
-          </div>
-          <div class="info-label">HSR</div>
-          <div class="info-value">
-            ${last.hsr} m
-            ${prev ? buildPerfTrendIcon(last.hsr, prev.hsr, true) : ""}
-          </div>
+      <div class="metrics-row metrics-row-large">
+        <div class="metric-pill metric-pill-main" data-gps="distance">
+          <span class="metric-label">Distance totale</span>
+          <span class="metric-value">${last.totalDistance} m</span>
+          ${prev ? buildPerfTrendIcon(last.totalDistance, prev.totalDistance, true) : ""}
         </div>
-        <div class="info-card">
-          <div class="info-label">Sprint & Vitesse max</div>
-          <div class="info-value">
-            Sprint : ${last.sprint} m
-            ${prev ? buildPerfTrendIcon(last.sprint, prev.sprint, true) : ""}<br/>
-            Vmax : ${last.vmax ?? "-"} m/s
-            ${prev ? buildPerfTrendIcon(last.vmax ?? 0, prev.vmax ?? 0, true) : ""}
-          </div>
+        <div class="metric-pill metric-pill-main" data-gps="hsr">
+          <span class="metric-label">HSR</span>
+          <span class="metric-value">${last.hsr} m</span>
+          ${prev ? buildPerfTrendIcon(last.hsr, prev.hsr, true) : ""}
         </div>
-      </div>
-      <div class="section-canvas-wrapper">
-        <canvas id="${canvasId}" width="420" height="120"></canvas>
+        <div class="metric-pill metric-pill-main" data-gps="sprint">
+          <span class="metric-label">Sprint</span>
+          <span class="metric-value">${last.sprint} m</span>
+          ${prev ? buildPerfTrendIcon(last.sprint, prev.sprint, true) : ""}
+        </div>
+        <div class="metric-pill metric-pill-main" data-gps="vmax">
+          <span class="metric-label">Vmax</span>
+          <span class="metric-value">${last.vmax ?? "-"} m/s</span>
+          ${prev ? buildPerfTrendIcon(last.vmax ?? 0, prev.vmax ?? 0, true) : ""}
+        </div>
       </div>
     </div>
     <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique complet des séances GPS</div>
-          <table class="table-like" style="margin-top:4px;">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Distance</th>
-                <th>HSR</th>
-                <th>Sprint</th>
-                <th>Vmax</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${byDateRows}
-            </tbody>
-          </table>
+      <div id="${detailId}" class="section-detail-panel section-detail-empty">
+        <div class="section-detail-placeholder">
+          Clique sur une bulle pour afficher l'historique GPS (graphique + tableau).
         </div>
       </div>
     </div>
   `;
   detail.appendChild(card);
 
-  const canvas = card.querySelector(`#${canvasId}`);
+  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
+    pill.addEventListener("click", (e) => {
+      e.stopPropagation();
+      card.classList.add("open");
+      card.querySelectorAll(".metric-pill-main").forEach((p) =>
+        p.classList.remove("metric-pill-active")
+      );
+      pill.classList.add("metric-pill-active");
+      const key = pill.getAttribute("data-gps");
+      renderGpsDetail(joueur, key, detailId);
+    });
+  });
+}
+
+function renderGpsDetail(joueur, key, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const data = gpsData
+    .filter((g) => g.joueurId === joueur.id)
+    .sort((a, b) => (a.date > b.date ? 1 : -1));
+
+  if (!data.length) {
+    container.innerHTML = "<div class='section-content'>Pas de données GPS.</div>";
+    return;
+  }
+
+  let label, extractor, unit;
+  if (key === "distance") {
+    label = "Distance totale (m)";
+    extractor = (d) => d.totalDistance;
+    unit = "m";
+  } else if (key === "hsr") {
+    label = "HSR (m)";
+    extractor = (d) => d.hsr;
+    unit = "m";
+  } else if (key === "sprint") {
+    label = "Distance sprint (m)";
+    extractor = (d) => d.sprint;
+    unit = "m";
+  } else {
+    label = "Vmax (m/s)";
+    extractor = (d) => d.vmax;
+    unit = "m/s";
+  }
+
+  const series = data
+    .map((d) => ({ date: d.date, value: extractor(d) }))
+    .filter((s) => s.value != null);
+
+  const values = series.map((s) => s.value);
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const last = values[values.length - 1];
+
+  const rows = series
+    .map(
+      (s) => `
+      <tr>
+        <td>${s.date}</td>
+        <td>${s.value} ${unit}</td>
+      </tr>`
+    )
+    .join("");
+
+  const canvasId = `gps-metric-canvas-${joueur.id}-${key}`;
+
+  container.classList.remove("section-detail-empty");
+  container.innerHTML = `
+    <div class="section-detail-header">
+      <div>
+        <div class="section-detail-title">${label}</div>
+        <div class="section-detail-sub">Historique des séances GPS</div>
+      </div>
+      <div class="section-detail-kpi">
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Dernière valeur</span>
+          <span class="info-value">${last} ${unit}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Min / Max</span>
+          <span class="info-value">${min} / ${max} ${unit}</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-detail-body">
+      <div class="section-detail-chart">
+        <canvas id="${canvasId}" width="420" height="160"></canvas>
+      </div>
+      <div class="section-detail-table">
+        <table class="table-like">
+          <thead><tr><th>Date</th><th>${label}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const canvas = document.getElementById(canvasId);
   if (canvas) {
-    drawGpsChart(canvas, sortedByDate);
+    drawSimpleLineChart(canvas, series, label);
   }
 }
 
@@ -1424,16 +1489,17 @@ function getFunctionalHistorySynthetic(joueur) {
   return history;
 }
 
+// ================== TESTS FONCTIONNELS GLOBAUX (UPPER / LOWER) ==================
+
 function renderFunctionalSection(detail, joueur) {
   const data = testsFonctionnels.find((t) => t.joueurId === joueur.id);
   const history = getFunctionalHistorySynthetic(joueur);
   const current = history[history.length - 1];
   const prev = history[history.length - 2] || current;
-  const historyId = `functional-history-${joueur.id}`;
-  const canvasId = `fv-canvas-${joueur.id}`;
+  const detailId = `functional-detail-${joueur.id}`;
 
   const card = document.createElement("div");
-  card.className = "section-card open";
+  card.className = "section-card open functional-section";
 
   if (!data) {
     card.innerHTML = `
@@ -1461,76 +1527,68 @@ function renderFunctionalSection(detail, joueur) {
       <div class="section-toggle-icon">▶</div>
     </div>
     <div class="section-summary">
-      <div class="metrics-row">
-        <div class="metric-pill" data-metric="dc1rm">
+      <div class="metrics-row metrics-row-large">
+        <div class="metric-pill metric-pill-main" data-metric="dc1rm">
           <span class="metric-label">DC 1RM</span>
           <span class="metric-value">${current.dc1rm} kg</span>
           ${buildPerfTrendIcon(current.dc1rm, prev.dc1rm, true)}
         </div>
-        <div class="metric-pill" data-metric="tirage1rm">
+        <div class="metric-pill metric-pill-main" data-metric="tirage1rm">
           <span class="metric-label">Tirage 1RM</span>
           <span class="metric-value">${current.tirage1rm} kg</span>
           ${buildPerfTrendIcon(current.tirage1rm, prev.tirage1rm, true)}
         </div>
-        <div class="metric-pill" data-metric="tractions">
+        <div class="metric-pill metric-pill-main" data-metric="tractions">
           <span class="metric-label">Tractions</span>
           <span class="metric-value">${current.tractions}</span>
           ${buildPerfTrendIcon(current.tractions, prev.tractions, true)}
         </div>
-        <div class="metric-pill" data-metric="grip">
+        <div class="metric-pill metric-pill-main" data-metric="grip">
           <span class="metric-label">Force grip</span>
           <span class="metric-value">${current.grip} kg</span>
           ${buildPerfTrendIcon(current.grip, prev.grip, true)}
         </div>
       </div>
-      <div class="metrics-row" style="margin-top:10px;">
-        <div class="metric-pill" data-metric="squat1rm">
+      <div class="metrics-row metrics-row-large" style="margin-top:10px;">
+        <div class="metric-pill metric-pill-main" data-metric="squat1rm">
           <span class="metric-label">Squat 1RM</span>
           <span class="metric-value">${current.squat1rm} kg</span>
           ${buildPerfTrendIcon(current.squat1rm, prev.squat1rm, true)}
         </div>
-        <div class="metric-pill" data-metric="imtp">
+        <div class="metric-pill metric-pill-main" data-metric="imtp">
           <span class="metric-label">IMTP</span>
           <span class="metric-value">${current.imtp} N</span>
           ${buildPerfTrendIcon(current.imtp, prev.imtp, true)}
         </div>
       </div>
-      <div class="section-canvas-wrapper">
-        <div class="info-label">Profil force–vitesse synthétique</div>
-        <canvas id="${canvasId}" width="420" height="140"></canvas>
-      </div>
     </div>
     <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique des tests fonctionnels (sélectionne une variable ci-dessus)</div>
-          <div id="functional-history-table-${joueur.id}" class="section-content" style="margin-top:6px;font-size:0.8rem;color:#6b7280;">
-            Clique sur une bulle pour afficher le détail et la courbe d'évolution.
-          </div>
+      <div id="${detailId}" class="section-detail-panel section-detail-empty">
+        <div class="section-detail-placeholder">
+          Clique sur une bulle pour afficher l'historique complet et la comparaison au groupe.
         </div>
       </div>
     </div>
   `;
   detail.appendChild(card);
 
-  const canvas = card.querySelector(`#${canvasId}`);
-  if (canvas) {
-    drawFVProfile(canvas, data);
-  }
-
-  card.querySelectorAll(".metric-pill").forEach((pill) => {
+  // clic sur les bulles
+  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      card.classList.add("open"); // ouvre la section si fermée
+      card.querySelectorAll(".metric-pill-main").forEach((p) =>
+        p.classList.remove("metric-pill-active")
+      );
+      pill.classList.add("metric-pill-active");
       const metric = pill.getAttribute("data-metric");
-      activeFunctionalMetric = metric;
-      renderFunctionalMetricHistory(joueur, metric);
+      renderFunctionalMetricHistory(joueur, metric, detailId);
     });
   });
 }
 
-function renderFunctionalMetricHistory(joueur, metricKey) {
-  const container = document.getElementById(`functional-history-table-${joueur.id}`);
+function renderFunctionalMetricHistory(joueur, metricKey, containerId) {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   const history = getFunctionalHistorySynthetic(joueur);
@@ -1545,10 +1603,21 @@ function renderFunctionalMetricHistory(joueur, metricKey) {
   const label = labelMap[metricKey] || metricKey;
 
   const values = history.map((h) => h[metricKey]).filter((v) => v != null);
-  if (values.length === 0) {
+  if (!values.length) {
     container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
     return;
   }
+
+  const maxPerf = Math.max(...values);
+  const lastValue = values[values.length - 1];
+
+  // moyenne groupe sur ce test (snapshot actuel)
+  const peers = testsFonctionnels
+    .map((t) => t[metricKey])
+    .filter((v) => typeof v === "number");
+  const groupMean = peers.length
+    ? peers.reduce((a, b) => a + b, 0) / peers.length
+    : null;
 
   const rows = history
     .map(
@@ -1556,27 +1625,58 @@ function renderFunctionalMetricHistory(joueur, metricKey) {
     <tr>
       <td>${h.date}</td>
       <td>${h[metricKey]}</td>
-    </tr>
-  `
+    </tr>`
     )
     .join("");
 
-  const canvasId = `functional-metric-canvas-${joueur.id}`;
+  const canvasId = `functional-metric-canvas-${joueur.id}-${metricKey}`;
+
+  container.classList.remove("section-detail-empty");
   container.innerHTML = `
-    <table class="table-like" style="margin-top:4px;">
-      <thead>
-        <tr><th>Date</th><th>${label}</th></tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="functional-canvas-wrapper">
-      <canvas id="${canvasId}" width="420" height="130"></canvas>
+    <div class="section-detail-header">
+      <div>
+        <div class="section-detail-title">${label}</div>
+        <div class="section-detail-sub">Historique des mesures pour ${joueur.prenom} ${joueur.nom}</div>
+      </div>
+      <div class="section-detail-kpi">
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Dernière valeur</span>
+          <span class="info-value">${lastValue}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Meilleure perf</span>
+          <span class="info-value">${maxPerf}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Moyenne groupe</span>
+          <span class="info-value">${
+            groupMean ? groupMean.toFixed(1) : "-"
+          }</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-detail-body">
+      <div class="section-detail-chart">
+        <canvas id="${canvasId}" width="420" height="160"></canvas>
+      </div>
+      <div class="section-detail-table">
+        <table class="table-like">
+          <thead>
+            <tr><th>Date</th><th>${label}</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
   `;
 
   const canvas = document.getElementById(canvasId);
   if (canvas) {
-    drawSimpleLineChart(canvas, history.map((h) => ({ date: h.date, value: h[metricKey] })), label);
+    drawSimpleLineChart(
+      canvas,
+      history.map((h) => ({ date: h.date, value: h[metricKey] })),
+      label
+    );
   }
 }
 
@@ -1679,18 +1779,19 @@ function drawSimpleLineChart(canvas, series, label) {
 
 function renderRunningTestsSection(detail, joueur) {
   const card = document.createElement("div");
-  card.className = "section-card open";
+  card.className = "section-card open running-section";
 
-  const historyId = `running-history-${joueur.id}`;
+  const detailId = `running-detail-${joueur.id}`;
   const lastTests = getLastTestsByType(joueur.id, ["Bonco", "Sprint 10m", "Sprint 30m"]);
   const func = testsFonctionnels.find((t) => t.joueurId === joueur.id);
   const vmax = func ? func.vmax : null;
 
   const pills = [];
+
   if (lastTests["Bonco"]) {
     const { current, previous } = lastTests["Bonco"];
     pills.push(`
-      <div class="metric-pill" data-course="Bonco">
+      <div class="metric-pill metric-pill-main" data-course="Bonco">
         <span class="metric-label">Bonco</span>
         <span class="metric-value">${current.valeur} ${current.unite}</span>
         ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
@@ -1700,7 +1801,7 @@ function renderRunningTestsSection(detail, joueur) {
   if (lastTests["Sprint 10m"]) {
     const { current, previous } = lastTests["Sprint 10m"];
     pills.push(`
-      <div class="metric-pill" data-course="Sprint 10m">
+      <div class="metric-pill metric-pill-main" data-course="Sprint 10m">
         <span class="metric-label">Sprint 10m</span>
         <span class="metric-value">${current.valeur} s</span>
         ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, false) : ""}
@@ -1710,7 +1811,7 @@ function renderRunningTestsSection(detail, joueur) {
   if (lastTests["Sprint 30m"]) {
     const { current, previous } = lastTests["Sprint 30m"];
     pills.push(`
-      <div class="metric-pill" data-course="Sprint 30m">
+      <div class="metric-pill metric-pill-main" data-course="Sprint 30m">
         <span class="metric-label">Sprint 30m</span>
         <span class="metric-value">${current.valeur} s</span>
         ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, false) : ""}
@@ -1719,7 +1820,7 @@ function renderRunningTestsSection(detail, joueur) {
   }
   if (vmax != null) {
     pills.push(`
-      <div class="metric-pill" data-course="Vmax">
+      <div class="metric-pill metric-pill-main" data-course="Vmax">
         <span class="metric-label">Vitesse max</span>
         <span class="metric-value">${vmax} m/s</span>
       </div>
@@ -1730,66 +1831,69 @@ function renderRunningTestsSection(detail, joueur) {
     <div class="section-header">
       <div class="section-header-left">
         <div class="section-title-main">Tests de course</div>
-        <div class="section-title-sub">Energétique & vitesse</div>
+        <div class="section-title-sub">Énergétique & vitesse</div>
       </div>
       <div class="section-toggle-icon">▶</div>
     </div>
     <div class="section-summary">
-      <div class="metrics-row">
-        ${pills.join("") || "<div class='section-content'>Aucun test de course enregistré.</div>"}
+      <div class="metrics-row metrics-row-large">
+        ${
+          pills.length
+            ? pills.join("")
+            : "<div class='section-content'>Aucun test de course enregistré.</div>"
+        }
       </div>
     </div>
     <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique par test de course</div>
-          <div id="running-history-table-${joueur.id}" class="section-content" style="margin-top:6px;font-size:0.8rem;color:#6b7280;">
-            Clique sur une bulle pour afficher l'historique et le graphique associé.
-          </div>
+      <div id="${detailId}" class="section-detail-panel section-detail-empty">
+        <div class="section-detail-placeholder">
+          Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
         </div>
       </div>
     </div>
   `;
   detail.appendChild(card);
 
-  card.querySelectorAll(".metric-pill").forEach((pill) => {
+  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      card.classList.add("open");
+      card.querySelectorAll(".metric-pill-main").forEach((p) =>
+        p.classList.remove("metric-pill-active")
+      );
+      pill.classList.add("metric-pill-active");
       const metric = pill.getAttribute("data-course");
-      activeCourseMetric = metric;
-      renderRunningMetricHistory(joueur, metric);
+      renderRunningMetricHistory(joueur, metric, detailId);
     });
   });
 }
 
-function getLastTestsByType(joueurId, types) {
-  const result = {};
-  types.forEach((type) => {
-    const list = testsPhysiques
-      .filter((t) => t.joueurId === joueurId && t.type === type)
-      .sort((a, b) => (a.date > b.date ? 1 : -1));
-    if (list.length > 0) {
-      result[type] = {
-        current: list[list.length - 1],
-        previous: list.length > 1 ? list[list.length - 2] : null,
-        all: list,
-      };
-    }
-  });
-  return result;
-}
-
-function renderRunningMetricHistory(joueur, metric) {
-  const container = document.getElementById(`running-history-table-${joueur.id}`);
+function renderRunningMetricHistory(joueur, metric, containerId) {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
+  // Cas Vmax: basé sur testsFonctionnels
   if (metric === "Vmax") {
-    const hist = getFunctionalHistorySynthetic(joueur).map((h) => ({ date: h.date, value: h.vmax }));
+    const hist = getFunctionalHistorySynthetic(joueur).map((h) => ({
+      date: h.date,
+      value: h.vmax,
+    }));
     if (!hist.length) {
       container.innerHTML = "<div class='section-content'>Pas de données Vmax.</div>";
       return;
     }
+
+    const values = hist.map((h) => h.value);
+    const max = Math.max(...values);
+    const last = values[values.length - 1];
+
+    const peers = testsFonctionnels
+      .map((t) => t.vmax)
+      .filter((v) => typeof v === "number");
+    const groupMean = peers.length
+      ? peers.reduce((a, b) => a + b, 0) / peers.length
+      : null;
+
     const rows = hist
       .map(
         (h) => `
@@ -1799,28 +1903,70 @@ function renderRunningMetricHistory(joueur, metric) {
         </tr>`
       )
       .join("");
-    const canvasId = `running-metric-canvas-${joueur.id}`;
+
+    const canvasId = `running-metric-canvas-${joueur.id}-vmax`;
+
+    container.classList.remove("section-detail-empty");
     container.innerHTML = `
-      <table class="table-like" style="margin-top:4px;">
-        <thead><tr><th>Date</th><th>Vmax (m/s)</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="functional-canvas-wrapper">
-        <canvas id="${canvasId}" width="420" height="130"></canvas>
+      <div class="section-detail-header">
+        <div>
+          <div class="section-detail-title">Vitesse max (m/s)</div>
+          <div class="section-detail-sub">Historique de la Vmax</div>
+        </div>
+        <div class="section-detail-kpi">
+          <div class="section-detail-kpi-block">
+            <span class="info-label">Dernière valeur</span>
+            <span class="info-value">${last} m/s</span>
+          </div>
+          <div class="section-detail-kpi-block">
+            <span class="info-label">Meilleure perf</span>
+            <span class="info-value">${max} m/s</span>
+          </div>
+          <div class="section-detail-kpi-block">
+            <span class="info-label">Moyenne groupe</span>
+            <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-detail-body">
+        <div class="section-detail-chart">
+          <canvas id="${canvasId}" width="420" height="160"></canvas>
+        </div>
+        <div class="section-detail-table">
+          <table class="table-like">
+            <thead><tr><th>Date</th><th>Vmax (m/s)</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       </div>
     `;
+
     const canvas = document.getElementById(canvasId);
     if (canvas) drawSimpleLineChart(canvas, hist, "Vmax (m/s)");
     return;
   }
 
+  // Autres tests (Bonco, Sprint 10, Sprint 30) basés sur testsPhysiques
   const all = testsPhysiques
     .filter((t) => t.joueurId === joueur.id && t.type === metric)
     .sort((a, b) => (a.date > b.date ? 1 : -1));
+
   if (!all.length) {
     container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
     return;
   }
+
+  const series = all.map((t) => ({ date: t.date, value: t.ratio }));
+  const values = series.map((s) => s.value);
+  const max = Math.max(...values);
+  const last = values[values.length - 1];
+
+  const peers = testsPhysiques.filter((t) => t.type === metric);
+  const peerRatios = peers.map((p) => p.ratio).filter((v) => typeof v === "number");
+  const groupMean = peerRatios.length
+    ? peerRatios.reduce((a, b) => a + b, 0) / peerRatios.length
+    : null;
+
   const rows = all
     .map(
       (t) => `
@@ -1831,76 +1977,77 @@ function renderRunningMetricHistory(joueur, metric) {
       </tr>`
     )
     .join("");
-  const canvasId = `running-metric-canvas-${joueur.id}`;
+
+  const canvasId = `running-metric-canvas-${joueur.id}-${metric.replace(/\s/g, "")}`;
+
+  container.classList.remove("section-detail-empty");
   container.innerHTML = `
-    <table class="table-like" style="margin-top:4px;">
-      <thead><tr><th>Date</th><th>Valeur</th><th>Ratio</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="functional-canvas-wrapper">
-      <canvas id="${canvasId}" width="420" height="130"></canvas>
+    <div class="section-detail-header">
+      <div>
+        <div class="section-detail-title">${metric}</div>
+        <div class="section-detail-sub">Ratio de performance (normalisé à la référence)</div>
+      </div>
+      <div class="section-detail-kpi">
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Dernier ratio</span>
+          <span class="info-value">${last}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Meilleur ratio</span>
+          <span class="info-value">${max}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Moyenne groupe</span>
+          <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-detail-body">
+      <div class="section-detail-chart">
+        <canvas id="${canvasId}" width="420" height="160"></canvas>
+      </div>
+      <div class="section-detail-table">
+        <table class="table-like">
+          <thead><tr><th>Date</th><th>Valeur</th><th>Ratio</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
   `;
+
   const canvas = document.getElementById(canvasId);
   if (canvas) {
-    drawSimpleLineChart(
-      canvas,
-      all.map((t) => ({ date: t.date, value: t.ratio })),
-      `${metric} (ratio)`
-    );
+    drawSimpleLineChart(canvas, series, `${metric} (ratio)`);
   }
 }
+
 
 // ================== TESTS DE SAUT ==================
 
 function renderJumpTestsSection(detail, joueur) {
   const card = document.createElement("div");
-  card.className = "section-card open";
+  card.className = "section-card open jump-section";
 
-  const historyId = `jump-history-${joueur.id}`;
+  const detailId = `jump-detail-${joueur.id}`;
   const lastTests = getLastTestsByType(joueur.id, ["CMJ", "Squat Jump", "Single Hop", "Triple Hop"]);
 
   const pills = [];
-  if (lastTests["CMJ"]) {
-    const { current, previous } = lastTests["CMJ"];
+  const pushPill = (type, label) => {
+    if (!lastTests[type]) return;
+    const { current, previous } = lastTests[type];
     pills.push(`
-      <div class="metric-pill" data-jump="CMJ">
-        <span class="metric-label">CMJ</span>
-        <span class="metric-value">${current.valeur} cm</span>
+      <div class="metric-pill metric-pill-main" data-jump="${type}">
+        <span class="metric-label">${label}</span>
+        <span class="metric-value">${current.valeur} ${current.unite}</span>
         ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
       </div>
     `);
-  }
-  if (lastTests["Squat Jump"]) {
-    const { current, previous } = lastTests["Squat Jump"];
-    pills.push(`
-      <div class="metric-pill" data-jump="Squat Jump">
-        <span class="metric-label">Squat Jump</span>
-        <span class="metric-value">${current.valeur} cm</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
-      </div>
-    `);
-  }
-  if (lastTests["Single Hop"]) {
-    const { current, previous } = lastTests["Single Hop"];
-    pills.push(`
-      <div class="metric-pill" data-jump="Single Hop">
-        <span class="metric-label">Single Hop</span>
-        <span class="metric-value">${current.valeur} cm</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
-      </div>
-    `);
-  }
-  if (lastTests["Triple Hop"]) {
-    const { current, previous } = lastTests["Triple Hop"];
-    pills.push(`
-      <div class="metric-pill" data-jump="Triple Hop">
-        <span class="metric-label">Triple Hop</span>
-        <span class="metric-value">${current.valeur} cm</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
-      </div>
-    `);
-  }
+  };
+
+  pushPill("CMJ", "CMJ");
+  pushPill("Squat Jump", "Squat Jump");
+  pushPill("Single Hop", "Single Hop");
+  pushPill("Triple Hop", "Triple Hop");
 
   card.innerHTML = `
     <div class="section-header">
@@ -1911,45 +2058,61 @@ function renderJumpTestsSection(detail, joueur) {
       <div class="section-toggle-icon">▶</div>
     </div>
     <div class="section-summary">
-      <div class="metrics-row">
-        ${pills.join("") || "<div class='section-content'>Aucun test de saut enregistré.</div>"}
+      <div class="metrics-row metrics-row-large">
+        ${
+          pills.length
+            ? pills.join("")
+            : "<div class='section-content'>Aucun test de saut enregistré.</div>"
+        }
       </div>
     </div>
     <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique par test de saut</div>
-          <div id="jump-history-table-${joueur.id}" class="section-content" style="margin-top:6px;font-size:0.8rem;color:#6b7280;">
-            Clique sur une bulle pour afficher l'historique et le graphique associé.
-          </div>
+      <div id="${detailId}" class="section-detail-panel section-detail-empty">
+        <div class="section-detail-placeholder">
+          Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
         </div>
       </div>
     </div>
   `;
   detail.appendChild(card);
 
-  card.querySelectorAll(".metric-pill").forEach((pill) => {
+  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      card.classList.add("open");
+      card.querySelectorAll(".metric-pill-main").forEach((p) =>
+        p.classList.remove("metric-pill-active")
+      );
+      pill.classList.add("metric-pill-active");
       const metric = pill.getAttribute("data-jump");
-      activeJumpMetric = metric;
-      renderJumpMetricHistory(joueur, metric);
+      renderJumpMetricHistory(joueur, metric, detailId);
     });
   });
 }
 
-function renderJumpMetricHistory(joueur, metric) {
-  const container = document.getElementById(`jump-history-table-${joueur.id}`);
+function renderJumpMetricHistory(joueur, metric, containerId) {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   const all = testsPhysiques
     .filter((t) => t.joueurId === joueur.id && t.type === metric)
     .sort((a, b) => (a.date > b.date ? 1 : -1));
+
   if (!all.length) {
     container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
     return;
   }
+
+  const series = all.map((t) => ({ date: t.date, value: t.ratio }));
+  const values = series.map((s) => s.value);
+  const max = Math.max(...values);
+  const last = values[values.length - 1];
+
+  const peers = testsPhysiques.filter((t) => t.type === metric);
+  const peerRatios = peers.map((p) => p.ratio).filter((v) => typeof v === "number");
+  const groupMean = peerRatios.length
+    ? peerRatios.reduce((a, b) => a + b, 0) / peerRatios.length
+    : null;
 
   const rows = all
     .map(
@@ -1962,25 +2125,50 @@ function renderJumpMetricHistory(joueur, metric) {
       </tr>`
     )
     .join("");
-  const canvasId = `jump-metric-canvas-${joueur.id}`;
+
+  const canvasId = `jump-metric-canvas-${joueur.id}-${metric.replace(/\s/g, "")}`;
+
+  container.classList.remove("section-detail-empty");
   container.innerHTML = `
-    <table class="table-like" style="margin-top:4px;">
-      <thead><tr><th>Date</th><th>Côté</th><th>Valeur</th><th>Ratio</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="functional-canvas-wrapper">
-      <canvas id="${canvasId}" width="420" height="130"></canvas>
+    <div class="section-detail-header">
+      <div>
+        <div class="section-detail-title">${metric}</div>
+        <div class="section-detail-sub">Ratio de performance (normalisé à la référence)</div>
+      </div>
+      <div class="section-detail-kpi">
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Dernier ratio</span>
+          <span class="info-value">${last}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Meilleur ratio</span>
+          <span class="info-value">${max}</span>
+        </div>
+        <div class="section-detail-kpi-block">
+          <span class="info-label">Moyenne groupe</span>
+          <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-detail-body">
+      <div class="section-detail-chart">
+        <canvas id="${canvasId}" width="420" height="160"></canvas>
+      </div>
+      <div class="section-detail-table">
+        <table class="table-like">
+          <thead><tr><th>Date</th><th>Côté</th><th>Valeur</th><th>Ratio</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
   `;
+
   const canvas = document.getElementById(canvasId);
   if (canvas) {
-    drawSimpleLineChart(
-      canvas,
-      all.map((t) => ({ date: t.date, value: t.ratio })),
-      `${metric} (ratio)`
-    );
+    drawSimpleLineChart(canvas, series, `${metric} (ratio)`);
   }
 }
+
 
 // ================== PROFIL FORCE / VITESSE (CARTE DEDIEE) ==================
 
