@@ -1,101 +1,115 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head> 
-  <meta charset="UTF-8" />
-  <title>Suivi Joueurs – Stade Français Paris</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8" />
+<title>Suivi Joueurs – Stade Français Paris</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Police moderne Inter -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Police Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- CSS global -->
-  <link rel="stylesheet" href="styles.css" />
+<!-- Styles globaux -->
+<link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
-  <div class="app">
-    <!-- ======= SIDEBAR JOUEURS ======= -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo-circle">
-          <span class="logo-main">SFP</span>
-        </div>
-        <div class="sidebar-title">
-          <h1>U21 Stade Français Paris</h1>
-          <p>Centre de suivi – Performance &amp; Médecine</p>
-        </div>
-      </div>
+<div class="app">
 
-      <div class="sidebar-filters">
-        <input 
-          type="text" 
-          id="searchInput" 
-          class="search-input" 
-          placeholder="Rechercher un joueur (nom, poste)…" 
-        />
+    <!-- ===================== HEADER ===================== -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="logo-raw">
+                <img src="Image/SFP.png" alt="Stade Français" class="logo-raw-img">
+            </div>
 
-        <div class="filter-group">
-          <div class="filter-label">Ligne</div>
-          <div class="filter-chips">
-            <button class="chip chip-filter is-active" data-filter-line="all">Tous</button>
-            <button class="chip chip-filter" data-filter-line="Avants">Avants</button>
-            <button class="chip chip-filter" data-filter-line="Trois-quarts">3/4</button>
-          </div>
+            <div class="header-title-block">
+                <h1>Stade Français Paris</h1>
+                <p>Centre de Suivi – Performance & Médecine</p>
+            </div>
         </div>
 
-        <div class="filter-group">
-          <div class="filter-label">Disponibilité</div>
-          <div class="filter-chips">
-            <button class="chip chip-filter is-active" data-filter-status="all">Tous</button>
-            <button class="chip chip-filter" data-filter-status="Disponible">Disponibles</button>
-            <button class="chip chip-filter" data-filter-status="Blessé">Blessés / adaptés</button>
-          </div>
+        <div class="header-right">
+            <div class="header-stats">
+                <div class="stat-card stat-available">
+                    <span class="stat-label">Disponibles</span>
+                    <span id="stat-disponibles" class="stat-value">0</span>
+                </div>
+                <div class="stat-card stat-injury">
+                    <span class="stat-label">Indisponibles</span>
+                    <span id="stat-infirmerie" class="stat-value">0</span>
+                </div>
+            </div>
         </div>
-      </div>
+    </header>
 
-      <div class="sidebar-summary" id="squadSummary">
-        <div class="summary-item">
-          <span class="summary-label">Disponibles</span>
-          <span class="summary-value" id="countDisponible">0</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Blessés / adaptés</span>
-          <span class="summary-value" id="countBlesses">0</span>
-        </div>
-      </div>
+    <!-- ===================== LAYOUT PRINCIPAL ===================== -->
+    <main class="app-main">
 
-      <div class="sidebar-list" id="playersList">
-        <!-- Liste des joueurs générée par JS -->
-      </div>
-    </aside>
+        <!-- ========== PANEL GAUCHE : LISTE JOUEURS ========== -->
+        <section class="left-panel">
+            <div class="filters">
+                <div class="filters-main">
+                    <label for="filterSelect">Filtrer :</label>
+                    <select id="filterSelect">
+                        <option value="all">Tout l’effectif</option>
+                        <option value="available">Disponibles</option>
+                        <option value="injury">Blessés / adaptés</option>
+                    </select>
+                </div>
 
-    <!-- ======= ZONE PRINCIPALE ======= -->
-    <main class="main">
-      <header class="main-header">
-        <div class="breadcrumb">
-          <span class="breadcrumb-section">U21</span>
-          <span class="breadcrumb-separator">›</span>
-          <span class="breadcrumb-player" id="breadcrumbPlayer">Sélectionne un joueur</span>
-        </div>
-        <div class="main-header-right">
-          <span class="tag tag-season">Saison 2025–2026</span>
-        </div>
-      </header>
+                <input type="text" id="searchInput" placeholder="Rechercher (nom, poste…)" autocomplete="off" />
+            </div>
 
-      <!-- Détail joueur (rempli par JS) -->
-      <section id="playerDetail" class="player-detail empty-state">
-        <div class="empty-card">
-          <h2 class="empty-title">U21 Stade Français Paris</h2>
-          <p class="empty-subtitle">Centre de suivi – Performance &amp; Médecine</p>
-          <p class="empty-hint">Sélectionne un joueur dans la liste pour afficher son profil complet.</p>
-        </div>
-      </section>
+            <div id="playersList" class="players-list"></div>
+        </section>
+
+        <!-- ========== PANEL DROITE : FICHE JOUEUR ========== -->
+        <section class="right-panel">
+            <div id="playerDetail" class="player-detail empty-state">
+                <div class="empty-welcome">
+                    <img src="Image/SFP.png" class="empty-logo" alt="Logo Stade Français">
+                    <h2 class="empty-title">U21 Stade Français Paris</h2>
+                    <p class="empty-subtitle">Sélectionne un joueur pour afficher sa fiche complète.</p>
+                </div>
+            </div>
+        </section>
+
     </main>
-  </div>
+</div>
 
-  <!-- Chart.js pour les graphes -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Logique JS -->
-  <script src="app.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
+<!-- ===================== MODALES / POPUPS GLOBALES ===================== -->
+
+<!-- Modal générique pour afficher un historique (graph / table) -->
+<div id="historyModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">Historique</h3>
+            <button id="modalClose" class="modal-close">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <canvas id="modalChart"></canvas>
+
+            <table class="modal-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Valeur</th>
+                        <th>% PDC</th>
+                        <th>Rank groupe</th>
+                    </tr>
+                </thead>
+                <tbody id="modalTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- FIN DU BODY -->
+<script src="app.js"></script>
 </body>
 </html>
