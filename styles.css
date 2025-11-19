@@ -497,39 +497,72 @@ gap: 10px;
 
 /* Metrics pills */
 
-.metrics-row {
+.metrics-row-large {
 display: flex;
 flex-wrap: wrap;
-gap: 8px;
-margin-top: 6px;
+gap: 10px;
 }
 
 .metric-pill {
-padding: 6px 10px;
+padding: 8px 12px;
 border-radius: 999px;
 background: #020617;
 color: #e5e7eb;
 border: 1px solid #1f2937;
-font-size: 0.75rem;
+font-size: 0.8rem;
 display: inline-flex;
 align-items: center;
 gap: 6px;
 cursor: pointer;
-box-shadow: 0 4px 10px rgba(15,23,42,0.35);
+box-shadow: 0 8px 18px rgba(15,23,42,0.45);
+transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, border-color 0.12s;
+}
+
+.metrics-row-large {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metric-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #020617;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15,23,42,0.45);
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, border-color 0.12s;
+}
+
+.metric-pill-main {
+  background: linear-gradient(135deg, #020617, #111827);
+}
+
+.metric-pill:hover {
+  transform: translateY(-1px);
+  border-color: var(--sf-pink);
+  box-shadow: 0 10px 24px rgba(255,46,154,0.25);
+}
+
+.metric-pill-active {
+  border-color: var(--sf-pink);
+  box-shadow: 0 12px 26px rgba(255,46,154,0.35);
 }
 
 .metric-label {
-font-weight: 500;
+  font-weight: 500;
 }
 
 .metric-value {
-font-weight: 700;
-font-size: 0.8rem;
+  font-weight: 700;
+  font-size: 0.85rem;
 }
 
-.metric-trend {
-font-size: 0.8rem;
-}
 
 /* Gold badge / pill */
 
@@ -660,32 +693,88 @@ gap: 6px;
 align-items: center;
 }
 
-/* Test detail */
+/* Panneau de détail “carte agrandie” */
 
-.test-detail-header {
-display: flex;
-justify-content: space-between;
-align-items: flex-start;
-margin-top: 10px;
-margin-bottom: 8px;
-gap: 8px;
+.section-detail-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 16px 40px rgba(15,23,42,0.16);
 }
 
-.test-detail-title {
-font-size: 0.9rem;
-font-weight: 600;
+.section-detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
 }
 
-.test-detail-sub {
-font-size: 0.75rem;
-color: var(--text-muted);
+.section-detail-placeholder {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
 }
 
-.test-detail-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit,minmax(150px,1fr));
-gap: 8px;
-margin-top: 6px;
+.section-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.section-detail-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--sf-blue);
+}
+
+.section-detail-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.section-detail-kpi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-detail-kpi-block {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  min-width: 110px;
+}
+
+.section-detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.section-detail-chart {
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  padding: 8px;
+  background: #f9fafb;
+}
+
+.section-detail-table {
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  padding: 8px;
+  background: #ffffff;
+}
+
+@media(max-width: 900px) {
+  .section-detail-body {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* GPS cards */
