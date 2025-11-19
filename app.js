@@ -1,4 +1,4 @@
-// app_stade_francais.js
+// app.js
 // Version améliorée "style FIFA" avec sections cliquables, graphiques canvas
 // et organisation des blocs : Profil physique, GPS, Blessures, Tests, Zones anatomiques, Rééducation.
 
