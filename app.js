@@ -1161,15 +1161,38 @@ function renderGpsSection(detail, joueur) {
   `;
   detail.appendChild(card);
 
+  const detailContainer = document.getElementById(detailId);
+
   card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      const key = pill.getAttribute("data-gps");
+      if (!detailContainer) return;
+
+      const currentMetric = detailContainer.getAttribute("data-active-metric");
+
+      // Si on re-clique sur la même bulle -> on rétracte
+      if (currentMetric === key) {
+        card.querySelectorAll(".metric-pill-main").forEach((p) =>
+          p.classList.remove("metric-pill-active")
+        );
+        detailContainer.classList.add("section-detail-empty");
+        detailContainer.removeAttribute("data-active-metric");
+        detailContainer.innerHTML = `
+          <div class="section-detail-placeholder">
+            Clique sur une bulle pour afficher l'historique GPS (graphique + tableau).
+          </div>
+        `;
+        return;
+      }
+
+      // Sinon on ouvre / change de métrique
       card.classList.add("open");
       card.querySelectorAll(".metric-pill-main").forEach((p) =>
         p.classList.remove("metric-pill-active")
       );
       pill.classList.add("metric-pill-active");
-      const key = pill.getAttribute("data-gps");
+      detailContainer.setAttribute("data-active-metric", key);
       renderGpsDetail(joueur, key, detailId);
     });
   });
@@ -1572,16 +1595,38 @@ function renderFunctionalSection(detail, joueur) {
   `;
   detail.appendChild(card);
 
+  const detailContainer = document.getElementById(detailId);
   // clic sur les bulles
   card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      const metric = pill.getAttribute("data-metric");
+      if (!detailContainer) return;
+
+      const currentMetric = detailContainer.getAttribute("data-active-metric");
+
+      // Si on re-clique sur la même bulle -> on rétracte
+      if (currentMetric === metric) {
+        card.querySelectorAll(".metric-pill-main").forEach((p) =>
+          p.classList.remove("metric-pill-active")
+        );
+        detailContainer.classList.add("section-detail-empty");
+        detailContainer.removeAttribute("data-active-metric");
+        detailContainer.innerHTML = `
+          <div class="section-detail-placeholder">
+            Clique sur une bulle pour afficher l'historique complet et la comparaison au groupe.
+          </div>
+        `;
+        return;
+      }
+
+      // Sinon on ouvre / change de métrique
       card.classList.add("open"); // ouvre la section si fermée
       card.querySelectorAll(".metric-pill-main").forEach((p) =>
         p.classList.remove("metric-pill-active")
       );
       pill.classList.add("metric-pill-active");
-      const metric = pill.getAttribute("data-metric");
+      detailContainer.setAttribute("data-active-metric", metric);
       renderFunctionalMetricHistory(joueur, metric, detailId);
     });
   });
@@ -1775,6 +1820,25 @@ function drawSimpleLineChart(canvas, series, label) {
   ctx.fillText(label, padding, padding - 6);
 }
 
+// ================== HELPER POUR DERNIERS TESTS PAR TYPE ==================
+
+function getLastTestsByType(joueurId, types) {
+  const result = {};
+  types.forEach((type) => {
+    const all = testsPhysiques
+      .filter((t) => t.joueurId === joueurId && t.type === type)
+      .sort((a, b) => (a.date > b.date ? -1 : 1)); // plus récent d'abord
+
+    if (!all.length) return;
+
+    result[type] = {
+      current: all[0],
+      previous: all.length > 1 ? all[1] : null,
+    };
+  });
+  return result;
+}
+
 // ================== TESTS DE COURSE ==================
 
 function renderRunningTestsSection(detail, joueur) {
@@ -1854,15 +1918,38 @@ function renderRunningTestsSection(detail, joueur) {
   `;
   detail.appendChild(card);
 
+  const detailContainer = document.getElementById(detailId);
+
   card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      const metric = pill.getAttribute("data-course");
+      if (!detailContainer) return;
+
+      const currentMetric = detailContainer.getAttribute("data-active-metric");
+
+      // Si on re-clique sur la même bulle -> on rétracte
+      if (currentMetric === metric) {
+        card.querySelectorAll(".metric-pill-main").forEach((p) =>
+          p.classList.remove("metric-pill-active")
+        );
+        detailContainer.classList.add("section-detail-empty");
+        detailContainer.removeAttribute("data-active-metric");
+        detailContainer.innerHTML = `
+          <div class="section-detail-placeholder">
+            Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
+          </div>
+        `;
+        return;
+      }
+
+      // Sinon on ouvre / change de métrique
       card.classList.add("open");
       card.querySelectorAll(".metric-pill-main").forEach((p) =>
         p.classList.remove("metric-pill-active")
       );
       pill.classList.add("metric-pill-active");
-      const metric = pill.getAttribute("data-course");
+      detailContainer.setAttribute("data-active-metric", metric);
       renderRunningMetricHistory(joueur, metric, detailId);
     });
   });
@@ -2021,7 +2108,6 @@ function renderRunningMetricHistory(joueur, metric, containerId) {
   }
 }
 
-
 // ================== TESTS DE SAUT ==================
 
 function renderJumpTestsSection(detail, joueur) {
@@ -2076,15 +2162,38 @@ function renderJumpTestsSection(detail, joueur) {
   `;
   detail.appendChild(card);
 
+  const detailContainer = document.getElementById(detailId);
+
   card.querySelectorAll(".metric-pill-main").forEach((pill) => {
     pill.addEventListener("click", (e) => {
       e.stopPropagation();
+      const metric = pill.getAttribute("data-jump");
+      if (!detailContainer) return;
+
+      const currentMetric = detailContainer.getAttribute("data-active-metric");
+
+      // Si on re-clique sur la même bulle -> on rétracte
+      if (currentMetric === metric) {
+        card.querySelectorAll(".metric-pill-main").forEach((p) =>
+          p.classList.remove("metric-pill-active")
+        );
+        detailContainer.classList.add("section-detail-empty");
+        detailContainer.removeAttribute("data-active-metric");
+        detailContainer.innerHTML = `
+          <div class="section-detail-placeholder">
+            Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
+          </div>
+        `;
+        return;
+      }
+
+      // Sinon on ouvre / change de métrique
       card.classList.add("open");
       card.querySelectorAll(".metric-pill-main").forEach((p) =>
         p.classList.remove("metric-pill-active")
       );
       pill.classList.add("metric-pill-active");
-      const metric = pill.getAttribute("data-jump");
+      detailContainer.setAttribute("data-active-metric", metric);
       renderJumpMetricHistory(joueur, metric, detailId);
     });
   });
@@ -2168,7 +2277,6 @@ function renderJumpMetricHistory(joueur, metric, containerId) {
     drawSimpleLineChart(canvas, series, `${metric} (ratio)`);
   }
 }
-
 
 // ================== PROFIL FORCE / VITESSE (CARTE DEDIEE) ==================
 
@@ -2277,7 +2385,7 @@ function renderAnatomicalZonesSection(detail, joueur) {
     });
   });
 
-  // zone globale par défaut si dispo
+  // zone par défaut
   const defaultSeg = "Hanche";
   renderZoneTestsTable(joueur, defaultSeg, tableContainerId, detailContainerId);
 }
@@ -2400,9 +2508,9 @@ function renderTestDetailAdvanced(joueur, testId, containerId) {
     let cls = "asym-green";
     if (deltaPercent < -5) cls = "asym-red";
     else if (Math.abs(deltaPercent) <= 5) cls = "asym-orange";
-    groupHtml = `<span class="${cls}">Par rapport au groupe : ${deltaPercent >= 0 ? "+" : ""}${deltaPercent.toFixed(
-      1
-    )}%</span>`;
+    groupHtml = `<span class="${cls}">Par rapport au groupe : ${
+      deltaPercent >= 0 ? "+" : ""
+    }${deltaPercent.toFixed(1)}%</span>`;
   }
 
   // Gold : meilleure perf du groupe
@@ -2494,7 +2602,9 @@ function renderTestDetailAdvanced(joueur, testId, containerId) {
       </div>
       <div class="info-card">
         <div class="info-label">Zone</div>
-        <div class="info-value"><span class="${getZoneClass(test.zone)}"></span> ${test.zone || "-"}</div>
+        <div class="info-value"><span class="${getZoneClass(
+          test.zone
+        )}"></span> ${test.zone || "-"}</div>
       </div>
       <div class="info-card">
         ${bwHtml || "<div class='info-label'>Ratio / poids de corps</div><div class='info-value'>-</div>"}
@@ -2508,7 +2618,6 @@ function renderTestDetailAdvanced(joueur, testId, containerId) {
       <canvas id="${canvasId}" width="420" height="130"></canvas>
     </div>
   `;
-
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
 
@@ -2566,7 +2675,6 @@ function renderBlessureSection(detail, joueur) {
     progress = Math.round((done / total) * 100);
   }
 
-  const blessureId = blessure.id;
   const historyId = `rehab-history-${joueur.id}`;
 
   blessureSection.innerHTML = `
@@ -2639,9 +2747,9 @@ function renderRehabCalendarHtml(blessure) {
       e.setDate(e.getDate() + 6);
       return `
         <div class="calendar-week">
-          <div class="calendar-week-title">Semaine ${idx + 1} (${formatter.format(s)} - ${formatter.format(
-        e
-      )})</div>
+          <div class="calendar-week-title">Semaine ${idx + 1} (${formatter.format(
+        s
+      )} - ${formatter.format(e)})</div>
           <div class="calendar-week-content">${w.text}</div>
         </div>
       `;
