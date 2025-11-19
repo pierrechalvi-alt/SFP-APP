@@ -1,2832 +1,1049 @@
 // app.js
-// Version améliorée "style FIFA" avec sections cliquables, graphiques canvas
-// et organisation des blocs : Profil physique, GPS, Blessures, Tests, Zones anatomiques, Rééducation.
+// Version "pro" : même logique de bulles pour GPS, profil physique et antécédents,
+// + zones anatomiques claires avec tous les tests, différences D/G, % poids de corps
+// et position par rapport à la moyenne du groupe.
 
 // ================== ETAT GLOBAL ================== 
 
 let currentPlayerId = null;
-let selectedSegment = "Global";
-let selectedTestId = null;
-let searchTerm = ""; // recherche texte
-let activeFunctionalMetric = null;
-let activeCourseMetric = null;
-let activeJumpMetric = null;
+let searchTerm = "";
+let currentLineFilter = "all";
+let currentStatusFilter = "all";
 
-// ================== DONNEES JOUEURS ================= = 
+let activeGpsMetric = null;
+let activePhysicalMetric = null;
+let activeInjuryMetric = null;
+let activeTestId = null;
 
-const joueurs = [
+// Références vers graphiques Chart.js pour les détruire proprement
+const chartsStore = {
+  gps: null,
+  physical: null,
+  injury: null,
+  test: null,
+};
+
+// ================== STRUCTURE DES TESTS ================== 
+
+// Tous les tests référencés : id unique -> description pour affichage et synthèse
+const TEST_DEFINITION = {
+  cervical_flex: { label: "Cervical – Flexion", zone: "Rachis cervical" },
+  cervical_ext: { label: "Cervical – Extension", zone: "Rachis cervical" },
+  cervical_incl: { label: "Cervical – Inclinaisons", zone: "Rachis cervical" },
+
+  shoulder_ash: { label: "Épaule – ASH Test", zone: "Épaule" },
+
+  knee_quad_iso: { label: "Genou – Quadriceps – ISO 90°", zone: "Genou quadriceps" },
+  knee_ham_mccall: { label: "Genou – Ischios – McCall", zone: "Genou ischios" },
+  knee_ham_iso30: { label: "Genou – Ischios – NordBoard ISO30", zone: "Genou ischios" },
+
+  ankle_soleus: { label: "Cheville – Soléaire (Force desk)", zone: "Cheville" },
+  ankle_inv_evr: { label: "Cheville – Inverseurs/Éverseurs (Dynamo)", zone: "Cheville" },
+  ankle_gastro_hr: { label: "Cheville – Heel Raise", zone: "Cheville" },
+};
+
+// Structure pour l'affichage des zones anatomiques
+const ANATOMY_STRUCTURE = [
+  {
+    title: "Rachis cervical",
+    tests: ["cervical_flex", "cervical_ext", "cervical_incl"],
+  },
+  {
+    title: "Épaule",
+    tests: ["shoulder_ash"],
+  },
+  {
+    title: "Genou – Quadriceps",
+    tests: ["knee_quad_iso"],
+  },
+  {
+    title: "Genou – Ischios – McCall",
+    tests: ["knee_ham_mccall"],
+  },
+  {
+    title: "Genou – Ischios – ISO30",
+    tests: ["knee_ham_iso30"],
+  },
+  {
+    title: "Cheville – Soléaire",
+    tests: ["ankle_soleus"],
+  },
+  {
+    title: "Cheville – Inverseurs/Éverseurs",
+    tests: ["ankle_inv_evr"],
+  },
+  {
+    title: "Cheville – Gastroc – Heel Raise",
+    tests: ["ankle_gastro_hr"],
+  },
+];
+
+// Moyennes du groupe par test (à ajuster plus tard si tu veux les pluger sur des vraies données)
+const TEAM_TEST_AVERAGES = {
+  cervical_flex: 220,
+  cervical_ext: 240,
+  cervical_incl: 210,
+  shoulder_ash: 38,
+  knee_quad_iso: 3.1,        // N/kg ou valeur relative
+  knee_ham_mccall: 9,        // nb de répétitions
+  knee_ham_iso30: 1.7,       // N/kg
+  ankle_soleus: 3.4,
+  ankle_inv_evr: 1.8,
+  ankle_gastro_hr: 28,
+};
+
+// ================== DONNÉES JOUEURS (EXEMPLES) ================== 
+
+const players = [
   {
     id: "J001",
-    nom: "Braxton",
-    prenom: "ASI",
-    poste: "3",
-    ligne: "Pilier",
+    nom: "Dupont",
+    prenom: "Arthur",
+    poste: "9",
+    ligne: "Trois-quarts",
     statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-10",
+    disponibilite: "Apte",
     scoreGlobal: 88,
-    pointsForts: "CMJ, Sprint 10m",
-    pointsFaibles: "Isocinétique quadriceps",
-    antecedents: "Entorse cheville D 2023",
-    taille: 178,
-    poids: 82,
+    pointsForts: "Vitesse, prise d'info",
+    pointsFaibles: "Force quadriceps",
+    antecedentsTexte: "Entorse cheville G 2023, lésion ischio D 2024",
+    taille: 175,
+    poids: 80,
     masseGrasse: 10,
-    minutesJouees: 320,
-    photoUrl: "Image/asi.png",
-    dateNaissance: "12/03/2006",
+    minutesJouees: 620,
+    photoUrl: "", // image optionnelle
+    dateNaissance: "2005-03-12",
+    risqueProfil: "Modéré",
+
+    // Profils physiques -> bulles + historique
+    physicalProfile: {
+      speed: {
+        label: "Vitesse",
+        lastValue: 9.9,
+        unit: "m/s",
+        history: [
+          { date: "2025-06-01", value: 9.5 },
+          { date: "2025-08-01", value: 9.7 },
+          { date: "2025-10-01", value: 9.9 },
+        ],
+      },
+      power: {
+        label: "Puissance (CMJ)",
+        lastValue: 45,
+        unit: "cm",
+        history: [
+          { date: "2025-06-01", value: 42 },
+          { date: "2025-08-01", value: 44 },
+          { date: "2025-10-01", value: 45 },
+        ],
+      },
+      strength: {
+        label: "Force (1RM squat)",
+        lastValue: 140,
+        unit: "kg",
+        history: [
+          { date: "2025-06-01", value: 130 },
+          { date: "2025-08-01", value: 135 },
+          { date: "2025-10-01", value: 140 },
+        ],
+      },
+      bodyComp: {
+        label: "Masse grasse",
+        lastValue: 10,
+        unit: "%",
+        history: [
+          { date: "2025-06-01", value: 11.5 },
+          { date: "2025-08-01", value: 10.8 },
+          { date: "2025-10-01", value: 10.0 },
+        ],
+      },
+    },
+
+    // GPS -> bulles + historique
+    gpsMetrics: {
+      totalDistance: {
+        label: "Distance totale",
+        lastValue: 7.6,
+        unit: "km",
+        history: [
+          { date: "2025-09-01", value: 7.2 },
+          { date: "2025-09-15", value: 7.5 },
+          { date: "2025-10-01", value: 7.6 },
+        ],
+      },
+      hsr: {
+        label: "HSR",
+        lastValue: 550,
+        unit: "m",
+        history: [
+          { date: "2025-09-01", value: 480 },
+          { date: "2025-09-15", value: 520 },
+          { date: "2025-10-01", value: 550 },
+        ],
+      },
+      sprintLoad: {
+        label: "Sprints",
+        lastValue: 12,
+        unit: "nb",
+        history: [
+          { date: "2025-09-01", value: 9 },
+          { date: "2025-09-15", value: 11 },
+          { date: "2025-10-01", value: 12 },
+        ],
+      },
+    },
+
+    // Antécédents -> bulles + historique détaillé
+    injuries: [
+      {
+        id: "inj_ischio_2024",
+        label: "Ischio D · 2024",
+        zone: "Ischio droit",
+        type: "Lésion musculaire",
+        dateDebut: "2024-03-10",
+        dateRetour: "2024-04-05",
+        severite: "Modérée",
+        impact: "4 matchs manqués",
+        notes: "Bonne tolérance à la reprise haute vitesse.",
+        history: [
+          { date: "2024-03-10", etape: "Blessure match" },
+          { date: "2024-03-15", etape: "Début renfo excentrique" },
+          { date: "2024-03-25", etape: "Retour course linéaire" },
+          { date: "2024-04-05", etape: "Retour terrain complet" },
+        ],
+      },
+      {
+        id: "inj_cheville_2023",
+        label: "Cheville G · 2023",
+        zone: "Cheville gauche",
+        type: "Entorse",
+        dateDebut: "2023-10-18",
+        dateRetour: "2023-11-10",
+        severite: "Légère",
+        impact: "2 matchs manqués",
+        notes: "Renforcer stabilité latérale.",
+        history: [
+          { date: "2023-10-18", etape: "Blessure entraînement" },
+          { date: "2023-10-22", etape: "Début renfo proprio" },
+          { date: "2023-11-10", etape: "Retour match" },
+        ],
+      },
+    ],
+
+    // Tests par id => toujours gauche/droite
+    tests: {
+      cervical_flex: { left: 215, right: 220 },
+      cervical_ext: { left: 235, right: 242 },
+      cervical_incl: { left: 205, right: 210 },
+
+      shoulder_ash: { left: 37, right: 39 },
+
+      knee_quad_iso: { left: 3.0, right: 3.2 },
+      knee_ham_mccall: { left: 8, right: 9 },
+      knee_ham_iso30: { left: 1.6, right: 1.8 },
+
+      ankle_soleus: { left: 3.3, right: 3.5 },
+      ankle_inv_evr: { left: 1.7, right: 1.9 },
+      ankle_gastro_hr: { left: 27, right: 29 },
+    },
   },
+
+  // === Joueur 2 (exemple) ===
   {
     id: "J002",
     nom: "Martin",
-    prenom: "BLUM",
-    poste: "9",
-    ligne: "Demi de mêlée",
+    prenom: "Léo",
+    poste: "3",
+    ligne: "Avants",
     statut: "Blessé",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-05",
+    disponibilite: "Réathlé terrain",
     scoreGlobal: 76,
-    pointsForts: "CMJ",
-    pointsFaibles: "NordBoard, McCall",
-    antecedents: "Ischio D 2023; Cheville G 2021; Commotion 2024",
-    taille: 182,
-    poids: 88,
-    masseGrasse: 11,
-    minutesJouees: 410,
-    photoUrl: "Image/blum.png",
-    dateNaissance: "25/07/2005",
-  },
-  {
-    id: "J003",
-    nom: "Jacques",
-    prenom: "BOTHA",
-    poste: "4",
-    ligne: "Deuxième ligne",
-    statut: "Adapté",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-08",
-    scoreGlobal: 72,
-    pointsForts: "Isocinétique quadriceps, McCall",
-    pointsFaibles: "Sprint 30m",
-    antecedents: "Épaule G 2023",
-    taille: 185,
-    poids: 122,
-    masseGrasse: 18,
-    minutesJouees: 280,
-    photoUrl: "Image/botha.png",
-    dateNaissance: "09/11/2005",
-  },
-  {
-    id: "J004",
-    nom: "Alvaro",
-    prenom: "GARCIA ALBO",
-    poste: "2",
-    ligne: "Talonneur",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 84,
-    pointsForts: "Sprint 10m, CMJ",
-    pointsFaibles: "Ischio",
-    antecedents: "Aucune",
-    taille: 180,
-    poids: 86,
-    masseGrasse: 9,
-    minutesJouees: 390,
-    photoUrl: "Image/garcia.png",
-    dateNaissance: "03/01/2006",
-  },
-  {
-    id: "J005",
-    nom: "Isaac",
-    prenom: "KOFFI",
-    poste: "3",
-    ligne: "Pilier",
-    statut: "Blessé",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-06",
-    scoreGlobal: 79,
-    pointsForts: "NordBoard, CMJ",
-    pointsFaibles: "KTW cheville",
-    antecedents: "Entorse LLA cheville G 2022",
-    taille: 190,
-    poids: 104,
-    masseGrasse: 13,
-    minutesJouees: 250,
-    photoUrl: "Image/koffi.png",
-    dateNaissance: "18/09/2005",
-  },
-  {
-    id: "J006",
-    nom: "Noah",
-    prenom: "NENE",
-    poste: "13",
-    ligne: "Centre",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-10",
-    scoreGlobal: 86,
-    pointsForts: "Sprint 30m, CMJ",
-    pointsFaibles: "Rachis cervical",
-    antecedents: "Commotion 2024",
-    taille: 184,
-    poids: 92,
-    masseGrasse: 10,
-    minutesJouees: 430,
-    photoUrl: "Image/nene.png",
-    dateNaissance: "07/05/2006",
-  },
-  {
-    id: "J007",
-    nom: "Luka",
-    prenom: "RUSSEL",
-    poste: "11",
-    ligne: "Ailier",
-    statut: "Adapté",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 81,
-    pointsForts: "HSR GPS, Sprint 30m",
-    pointsFaibles: "Ischio G",
-    antecedents: "Ischio G 2022",
+    pointsForts: "Force max, mêlée",
+    pointsFaibles: "Vitesse, HSR",
+    antecedentsTexte: "Commotion 2024, tendinopathie rotulienne 2023",
     taille: 186,
-    poids: 90,
-    masseGrasse: 9,
-    minutesJouees: 360,
-    photoUrl: "Image/russel.png",
-    dateNaissance: "30/01/2006",
-  },
-  {
-    id: "J008",
-    nom: "Mosese",
-    prenom: "TABUAKOTO",
-    poste: "8",
-    ligne: "Troisième ligne",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-07",
-    scoreGlobal: 90,
-    pointsForts: "Isocinétique quadriceps, CMJ",
-    pointsFaibles: "KTW cheville D",
-    antecedents: "Lombalgies récidivantes",
-    taille: 192,
     poids: 112,
-    masseGrasse: 14,
-    minutesJouees: 445,
-    photoUrl: "Image/tabuakoto.png",
-    dateNaissance: "21/06/2005",
-  },
-  {
-    id: "J009",
-    nom: "IBO",
-    prenom: "Mathis",
-    poste: "15",
-    ligne: "Arrière",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 83,
-    pointsForts: "Sprint 30m, HSR",
-    pointsFaibles: "Ischio G",
-    antecedents: "Ischio G 2023",
-    taille: 183,
-    poids: 89,
-    masseGrasse: 11,
-    minutesJouees: 400,
-    photoUrl: "Image/ibo.png",
-    dateNaissance: "14/02/2006",
-  },
-  {
-    id: "J010",
-    nom: "Yanis",
-    prenom: "LUX",
-    poste: "3",
-    ligne: "Pilier",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 82,
-    pointsForts: "CMJ, Sprint 10m",
-    pointsFaibles: "KTW cheville",
-    antecedents: "Entorse cheville D 2022",
-    taille: 181,
-    poids: 87,
-    masseGrasse: 11,
-    minutesJouees: 310,
-    photoUrl: "Image/lux.png",
-    dateNaissance: "27/04/2006",
-  },
-  {
-    id: "J011",
-    nom: "Yannick",
-    prenom: "LODJRO",
-    poste: "14",
-    ligne: "Ailier",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-08",
-    scoreGlobal: 80,
-    pointsForts: "NordBoard, HSR",
-    pointsFaibles: "Isocinétique genou",
-    antecedents: "Ischio D 2021",
-    taille: 188,
-    poids: 102,
-    masseGrasse: 12,
-    minutesJouees: 295,
-    photoUrl: "Image/lodjro.png",
-    dateNaissance: "05/10/2005",
-  },
-  {
-    id: "J012",
-    nom: "Ollie",
-    prenom: "McCREA",
-    poste: "4",
-    ligne: "Deuxième ligne",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-08",
-    scoreGlobal: 83,
-    pointsForts: "Isocinétique, CMJ",
-    pointsFaibles: "Sprint 30m",
-    antecedents: "Aucune",
-    taille: 195,
-    poids: 110,
-    masseGrasse: 13,
-    minutesJouees: 270,
-    photoUrl: "Image/mccrea.png",
-    dateNaissance: "11/12/2005",
-  },
-  {
-    id: "J013",
-    nom: "Thibault",
-    prenom: "MOTASSI",
-    poste: "9",
-    ligne: "Demi de mêlée",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-07",
-    scoreGlobal: 81,
-    pointsForts: "Lombaire iso, NordBoard",
-    pointsFaibles: "Sprint 10m",
-    antecedents: "Lombalgies 2023",
-    taille: 193,
-    poids: 108,
-    masseGrasse: 14,
-    minutesJouees: 260,
-    photoUrl: "Image/motassi.png",
-    dateNaissance: "19/08/2005",
-  },
-  {
-    id: "J014",
-    nom: "Seta",
-    prenom: "TURAGACOKE",
-    poste: "6",
-    ligne: "Troisième ligne",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-07",
-    scoreGlobal: 85,
-    pointsForts: "Sprint 30m, HSR",
-    pointsFaibles: "Ischio",
-    antecedents: "Ischio D 2022",
-    taille: 183,
-    poids: 90,
-    masseGrasse: 10,
-    minutesJouees: 330,
-    photoUrl: "Image/turagacoke.png",
-    dateNaissance: "08/06/2006",
-  },
-  {
-    id: "J015",
-    nom: "Ethan",
-    prenom: "TIA",
-    poste: "2",
-    ligne: "Talonneur",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 84,
-    pointsForts: "Sprint 10m, CMJ",
-    pointsFaibles: "Isocinétique genou",
-    antecedents: "Entorse genou G 2023",
-    taille: 182,
-    poids: 88,
-    masseGrasse: 10,
-    minutesJouees: 345,
-    photoUrl: "Image/tia.png",
-    dateNaissance: "01/03/2006",
-  },
-  {
-    id: "J016",
-    nom: "Jaydon",
-    prenom: "VILIAMU",
-    poste: "5",
-    ligne: "Deuxième ligne",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 84,
-    pointsForts: "CMJ",
-    pointsFaibles: "Force soléaire G",
-    antecedents: "Entorse genou G 2023",
-    taille: 182,
-    poids: 88,
-    masseGrasse: 10,
-    minutesJouees: 345,
-    photoUrl: "Image/viliamu.png",
-    dateNaissance: "23/09/2005",
-  },
-  {
-    id: "J017",
-    nom: "Méric",
-    prenom: "CHIFFRIN",
-    poste: "7",
-    ligne: "Troisième ligne",
-    statut: "Blessé",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 49,
-    pointsForts: "",
-    pointsFaibles: "Cheville, Ischio",
-    antecedents: "Entorse cheville G 2023",
-    taille: 198,
-    poids: 87,
-    masseGrasse: 7,
-    minutesJouees: 345,
-    photoUrl: "Image/chiffrin.png",
-    dateNaissance: "04/04/2006",
-  },
-  {
-    id: "J018",
-    nom: "Mehdi",
-    prenom: "BORSALI",
-    poste: "1",
-    ligne: "Pilier",
-    statut: "Adapté",
-    disponibilite: "Infirmerie",
-    dernierTest: "2025-11-08",
-    scoreGlobal: 62,
-    pointsForts: "Isocinétique quadriceps, McCall",
-    pointsFaibles: "Sprint 30m",
-    antecedents: "Épaule G 2023",
-    taille: 182,
-    poids: 122,
-    masseGrasse: 18,
-    minutesJouees: 280,
-    photoUrl: "Image/borsali.png",
-    dateNaissance: "29/01/2005",
-  },
-  {
-    id: "J019",
-    nom: "LEOFA",
-    prenom: "TAUAVE",
-    poste: "15",
-    ligne: "Arrière",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-09",
-    scoreGlobal: 83,
-    pointsForts: "HSR",
-    pointsFaibles: "Cheville G",
-    antecedents: "Syndesmose G 2023",
-    taille: 178,
-    poids: 79,
-    masseGrasse: 11,
-    minutesJouees: 400,
-    photoUrl: "Image/leofa.png",
-    dateNaissance: "16/05/2006",
-  },
-  {
-    id: "J020",
-    nom: "Antonin",
-    prenom: "BIKAI-COMBE",
-    poste: "13",
-    ligne: "Centre",
-    statut: "Disponible",
-    disponibilite: "Disponible",
-    dernierTest: "2025-11-10",
-    scoreGlobal: 86,
-    pointsForts: "Développé couché",
-    pointsFaibles: "Rachis cervical",
-    antecedents: "Commotion 2024",
-    taille: 185,
-    poids: 97,
-    masseGrasse: 12,
-    minutesJouees: 43,
-    photoUrl: "Image/bikaicombe.png",
-    dateNaissance: "10/02/2006",
-  },
-];
+    masseGrasse: 16,
+    minutesJouees: 430,
+    photoUrl: "",
+    dateNaissance: "2005-08-21",
+    risqueProfil: "Élevé",
 
-// ================== TESTS PHYSIQUES ==================
-// On reprend ta base et on ajoute quelques tests (Bonco, Squat Jump, Single/Triple hop...) pour rendre les sections Course/Saut plus visuelles.
-
-const testsPhysiques = [
-  // ASI Braxton (J001)
-  { id: "T001", joueurId: "J001", date: "2025-11-10", type: "CMJ", segment: "Hanche", cote: "-", valeur: 42, unite: "cm", ref: 40, ratio: 1.05, zone: "Vert" },
-  { id: "T002", joueurId: "J001", date: "2025-11-09", type: "CMJ", segment: "Hanche", cote: "-", valeur: 40, unite: "cm", ref: 40, ratio: 1.0, zone: "Vert" },
-  { id: "T003", joueurId: "J001", date: "2025-11-10", type: "Sprint 10m", segment: "Course", cote: "-", valeur: 1.62, unite: "s", ref: 1.70, ratio: 1.05, zone: "Vert" },
-  { id: "T004", joueurId: "J001", date: "2025-11-08", type: "Sprint 10m", segment: "Course", cote: "-", valeur: 1.67, unite: "s", ref: 1.70, ratio: 1.02, zone: "Vert" },
-  { id: "T005", joueurId: "J001", date: "2025-11-09", type: "Isocinétique quadriceps", segment: "Genou", cote: "Droit", valeur: 185, unite: "%BW", ref: 180, ratio: 1.03, zone: "Vert" },
-  { id: "T006", joueurId: "J001", date: "2025-11-09", type: "Isocinétique quadriceps", segment: "Genou", cote: "Gauche", valeur: 176, unite: "%BW", ref: 180, ratio: 0.98, zone: "Orange" },
-  { id: "T007", joueurId: "J001", date: "2025-11-07", type: "Cognition réaction", segment: "Tête", cote: "-", valeur: 280, unite: "ms", ref: 300, ratio: 1.07, zone: "Vert" },
-  { id: "T008", joueurId: "J001", date: "2025-11-07", type: "Isométrie rachis cervical", segment: "Rachis cervical", cote: "-", valeur: 260, unite: "N", ref: 250, ratio: 1.04, zone: "Vert" },
-  { id: "T009", joueurId: "J001", date: "2025-11-06", type: "Bonco", segment: "Course", cote: "-", valeur: 175, unite: "contacts", ref: 160, ratio: 1.09, zone: "Vert" },
-  { id: "T010", joueurId: "J001", date: "2025-11-06", type: "Squat Jump", segment: "Hanche", cote: "-", valeur: 39, unite: "cm", ref: 38, ratio: 1.03, zone: "Vert" },
-
-  // BLUM Martin (J002) blessé ischio
-  { id: "T101", joueurId: "J002", date: "2025-11-05", type: "CMJ", segment: "Hanche", cote: "-", valeur: 31, unite: "cm", ref: 40, ratio: 0.78, zone: "Rouge" },
-  { id: "T102", joueurId: "J002", date: "2025-11-05", type: "NordBoard", segment: "Ischio", cote: "Droit", valeur: 245, unite: "N", ref: 320, ratio: 0.77, zone: "Rouge" },
-  { id: "T103", joueurId: "J002", date: "2025-11-05", type: "NordBoard", segment: "Ischio", cote: "Gauche", valeur: 305, unite: "N", ref: 320, ratio: 0.95, zone: "Vert" },
-  { id: "T104", joueurId: "J002", date: "2025-11-04", type: "McCall", segment: "Ischio", cote: "Droit", valeur: 2, unite: "/5", ref: 5, ratio: 0.4, zone: "Rouge" },
-  { id: "T105", joueurId: "J002", date: "2025-11-03", type: "KTW", segment: "Cheville", cote: "Gauche", valeur: 11, unite: "cm", ref: 10, ratio: 1.1, zone: "Vert" },
-  { id: "T106", joueurId: "J002", date: "2025-11-03", type: "Single Hop", segment: "Genou", cote: "Droit", valeur: 180, unite: "cm", ref: 190, ratio: 0.95, zone: "Orange" },
-  { id: "T107", joueurId: "J002", date: "2025-11-03", type: "Single Hop", segment: "Genou", cote: "Gauche", valeur: 192, unite: "cm", ref: 190, ratio: 1.01, zone: "Vert" },
-
-  // BOTHA Jacques (J003) genou / épaule
-  { id: "T201", joueurId: "J003", date: "2025-11-08", type: "CMJ", segment: "Hanche", cote: "-", valeur: 29, unite: "cm", ref: 32, ratio: 0.9, zone: "Orange" },
-  { id: "T202", joueurId: "J003", date: "2025-11-08", type: "Isocinétique quadriceps", segment: "Genou", cote: "Droit", valeur: 165, unite: "%BW", ref: 180, ratio: 0.92, zone: "Orange" },
-  { id: "T203", joueurId: "J003", date: "2025-11-08", type: "Isocinétique quadriceps", segment: "Genou", cote: "Gauche", valeur: 150, unite: "%BW", ref: 180, ratio: 0.83, zone: "Rouge" },
-  { id: "T204", joueurId: "J003", date: "2025-11-07", type: "McCall", segment: "Ischio", cote: "Gauche", valeur: 3, unite: "/5", ref: 5, ratio: 0.6, zone: "Rouge" },
-  { id: "T205", joueurId: "J003", date: "2025-11-07", type: "ASH test", segment: "Épaule", cote: "-", valeur: 38, unite: "N/kg", ref: 40, ratio: 0.95, zone: "Vert" },
-
-  // GARCIA Alvaro (J004)
-  { id: "T301", joueurId: "J004", date: "2025-11-09", type: "CMJ", segment: "Hanche", cote: "-", valeur: 40, unite: "cm", ref: 40, ratio: 1.0, zone: "Vert" },
-  { id: "T302", joueurId: "J004", date: "2025-11-09", type: "Sprint 30m", segment: "Course", cote: "-", valeur: 4.15, unite: "s", ref: 4.2, ratio: 1.01, zone: "Vert" },
-  { id: "T303", joueurId: "J004", date: "2025-11-08", type: "KTW", segment: "Cheville", cote: "Droit", valeur: 9, unite: "cm", ref: 10, ratio: 0.9, zone: "Orange" },
-  { id: "T304", joueurId: "J004", date: "2025-11-08", type: "KTW", segment: "Cheville", cote: "Gauche", valeur: 10, unite: "cm", ref: 10, ratio: 1.0, zone: "Vert" },
-  { id: "T305", joueurId: "J004", date: "2025-11-08", type: "Triple Hop", segment: "Genou", cote: "Droit", valeur: 570, unite: "cm", ref: 550, ratio: 1.04, zone: "Vert" },
-  { id: "T306", joueurId: "J004", date: "2025-11-08", type: "Triple Hop", segment: "Genou", cote: "Gauche", valeur: 555, unite: "cm", ref: 550, ratio: 1.01, zone: "Vert" },
-
-  // KOFFI Isaac (J005) cheville
-  { id: "T401", joueurId: "J005", date: "2025-11-06", type: "KTW", segment: "Cheville", cote: "Gauche", valeur: 8, unite: "cm", ref: 10, ratio: 0.8, zone: "Rouge" },
-  { id: "T402", joueurId: "J005", date: "2025-11-06", type: "KTW", segment: "Cheville", cote: "Droit", valeur: 10, unite: "cm", ref: 10, ratio: 1.0, zone: "Vert" },
-  { id: "T403", joueurId: "J005", date: "2025-11-06", type: "Sprint 30m", segment: "Course", cote: "-", valeur: 4.4, unite: "s", ref: 4.3, ratio: 0.98, zone: "Orange" },
-
-  // NENE Noah (J006) tête / cervical
-  { id: "T501", joueurId: "J006", date: "2025-11-10", type: "Cognition réaction", segment: "Tête", cote: "-", valeur: 310, unite: "ms", ref: 300, ratio: 0.97, zone: "Orange" },
-  { id: "T502", joueurId: "J006", date: "2025-11-07", type: "Cognition réaction", segment: "Tête", cote: "-", valeur: 340, unite: "ms", ref: 300, ratio: 0.88, zone: "Rouge" },
-  { id: "T503", joueurId: "J006", date: "2025-11-09", type: "Isométrie rachis cervical", segment: "Rachis cervical", cote: "-", valeur: 235, unite: "N", ref: 250, ratio: 0.94, zone: "Orange" },
-
-  // RUSSEL Luka (J007) ischio
-  { id: "T601", joueurId: "J007", date: "2025-11-09", type: "NordBoard", segment: "Ischio", cote: "Droit", valeur: 310, unite: "N", ref: 320, ratio: 0.97, zone: "Vert" },
-  { id: "T602", joueurId: "J007", date: "2025-11-09", type: "NordBoard", segment: "Ischio", cote: "Gauche", valeur: 275, unite: "N", ref: 320, ratio: 0.86, zone: "Orange" },
-  { id: "T603", joueurId: "J007", date: "2025-11-08", type: "Sprint 30m", segment: "Course", cote: "-", valeur: 4.28, unite: "s", ref: 4.2, ratio: 0.98, zone: "Orange" },
-
-  // TABUAKOTO Mosese (J008) lombaire / genou
-  { id: "T701", joueurId: "J008", date: "2025-11-07", type: "Extension lombaire iso", segment: "Lombaire", cote: "-", valeur: 430, unite: "N", ref: 400, ratio: 1.08, zone: "Vert" },
-  { id: "T702", joueurId: "J008", date: "2025-11-07", type: "Isocinétique quadriceps", segment: "Genou", cote: "Droit", valeur: 190, unite: "%BW", ref: 180, ratio: 1.06, zone: "Vert" },
-  { id: "T703", joueurId: "J008", date: "2025-11-07", type: "Isocinétique quadriceps", segment: "Genou", cote: "Gauche", valeur: 182, unite: "%BW", ref: 180, ratio: 1.01, zone: "Vert" },
-];
-
-// ================== TESTS FONCTIONNELS GLOBAUX ==================
-
-const testsFonctionnels = [
-  // Upper : dc1rm, tirage1rm, tractions, grip
-  // Lower : squat1rm, imtp
-  { joueurId: "J001", dc1rm: 110, tirage1rm: 95, tractions: 10, grip: 52, squat1rm: 150, imtp: 2800, f1080: 8.5, vmax: 9.1 },
-  { joueurId: "J002", dc1rm: 95,  tirage1rm: 85, tractions: 8,  grip: 50, squat1rm: 140, imtp: 2600, f1080: 8.0, vmax: 9.0 },
-  { joueurId: "J003", dc1rm: 140, tirage1rm: 120, tractions: 6, grip: 54, squat1rm: 180, imtp: 3200, f1080: 7.8, vmax: 8.2 },
-  { joueurId: "J004", dc1rm: 105, tirage1rm: 100, tractions: 11, grip: 50, squat1rm: 155, imtp: 2750, f1080: 8.6, vmax: 9.3 },
-  { joueurId: "J005", dc1rm: 120, tirage1rm: 105, tractions: 8, grip: 55, squat1rm: 170, imtp: 2900, f1080: 8.0, vmax: 8.8 },
-  { joueurId: "J006", dc1rm: 110, tirage1rm: 100, tractions: 10, grip: 51, squat1rm: 160, imtp: 2700, f1080: 8.7, vmax: 9.4 },
-  { joueurId: "J007", dc1rm: 100, tirage1rm: 95, tractions: 9, grip: 49, squat1rm: 150, imtp: 2650, f1080: 8.3, vmax: 9.0 },
-  { joueurId: "J008", dc1rm: 135, tirage1rm: 120, tractions: 7, grip: 56, squat1rm: 185, imtp: 3100, f1080: 8.1, vmax: 8.5 },
-  { joueurId: "J009", dc1rm: 105, tirage1rm: 100, tractions: 10, grip: 50, squat1rm: 160, imtp: 2720, f1080: 8.5, vmax: 9.2 },
-  { joueurId: "J010", dc1rm: 100, tirage1rm: 95, tractions: 9, grip: 48, squat1rm: 150, imtp: 2680, f1080: 8.4, vmax: 9.0 },
-  { joueurId: "J011", dc1rm: 125, tirage1rm: 115, tractions: 8, grip: 55, squat1rm: 175, imtp: 2950, f1080: 8.1, vmax: 8.6 },
-  { joueurId: "J012", dc1rm: 130, tirage1rm: 118, tractions: 7, grip: 54, squat1rm: 180, imtp: 3050, f1080: 7.9, vmax: 8.4 },
-  { joueurId: "J013", dc1rm: 120, tirage1rm: 110, tractions: 7, grip: 53, squat1rm: 172, imtp: 2980, f1080: 8.0, vmax: 8.5 },
-  { joueurId: "J014", dc1rm: 110, tirage1rm: 100, tractions: 11, grip: 50, squat1rm: 165, imtp: 2750, f1080: 8.8, vmax: 9.4 },
-  { joueurId: "J015", dc1rm: 108, tirage1rm: 100, tractions: 10, grip: 51, squat1rm: 162, imtp: 2730, f1080: 8.6, vmax: 9.3 },
-];
-
-// ================== BLESSURES & REEDUC ==================
-
-const blessures = [
-  {
-    id: "B001",
-    joueurId: "J002",
-    dateBlessure: "2025-10-29",
-    diagnostic: "Lésion ischio BFlh grade 2",
-    localisation: "Ischio Droit",
-    segment: "Ischio",
-    phase: "Rééducation",
-    rttEstimee: "2025-11-18",
-    rttEffective: "",
-    rtpEstimee: "2025-11-25",
-    rtpEffective: "",
-    prochainesVisites: "IRM 12/11; Chir 18/11",
-    prochainsTests: "NordBoard; CMJ; McCall; Sprint 30m",
-    protocole: {
-      semaine1: "Contrôle douleur, isométriques légers, mobilité douce",
-      semaine2: "Augmentation charge isométrique, début excentrique léger",
-      semaine3: "Excentrique ciblé, course en ligne droite jusqu'à 60%",
-      semaine4: "Sprints 70–80%, changements de direction contrôlés",
-      semaine5: "Sprints 90%, drills poste, intégration partielle",
-      semaine6: "Validation : tests iso genou + NordBoard + CMJ + Sprint",
+    physicalProfile: {
+      speed: {
+        label: "Vitesse",
+        lastValue: 8.5,
+        unit: "m/s",
+        history: [
+          { date: "2025-06-01", value: 8.2 },
+          { date: "2025-08-01", value: 8.4 },
+          { date: "2025-10-01", value: 8.5 },
+        ],
+      },
+      power: {
+        label: "Puissance (CMJ)",
+        lastValue: 33,
+        unit: "cm",
+        history: [
+          { date: "2025-06-01", value: 31 },
+          { date: "2025-08-01", value: 32 },
+          { date: "2025-10-01", value: 33 },
+        ],
+      },
+      strength: {
+        label: "Force (1RM squat)",
+        lastValue: 190,
+        unit: "kg",
+        history: [
+          { date: "2025-06-01", value: 180 },
+          { date: "2025-08-01", value: 185 },
+          { date: "2025-10-01", value: 190 },
+        ],
+      },
+      bodyComp: {
+        label: "Masse grasse",
+        lastValue: 16,
+        unit: "%",
+        history: [
+          { date: "2025-06-01", value: 17.5 },
+          { date: "2025-08-01", value: 16.8 },
+          { date: "2025-10-01", value: 16.0 },
+        ],
+      },
     },
-    etapesCles: "IRM, test excentrique, test sprint 90%, test terrain poste, validation pré-match",
-  },
-  {
-    id: "B002",
-    joueurId: "J003",
-    dateBlessure: "2025-10-25",
-    diagnostic: "Instabilité acromio-claviculaire",
-    localisation: "Épaule G",
-    segment: "Épaule",
-    phase: "Reconditionnement terrain",
-    rttEstimee: "2025-11-15",
-    rttEffective: "",
-    rtpEstimee: "2025-11-22",
-    rtpEffective: "",
-    prochainesVisites: "Chir 14/11",
-    prochainsTests: "Isométrie épaule; tests de contact progressifs",
-    protocole: {
-      semaine1: "Gestion douleur, travail passif/actif assisté",
-      semaine2: "Renfo scapulaire, isométrie épaule",
-      semaine3: "Renfo dynamique, proprioception, chaîne cinétique",
-      semaine4: "Exercices fonctionnels, poussées, passes et plaquages contrôlés",
-      semaine5: "Contacts progressifs + validation tests iso épaule",
+
+    gpsMetrics: {
+      totalDistance: {
+        label: "Distance totale",
+        lastValue: 5.4,
+        unit: "km",
+        history: [
+          { date: "2025-09-01", value: 5.2 },
+          { date: "2025-09-15", value: 5.3 },
+          { date: "2025-10-01", value: 5.4 },
+        ],
+      },
+      hsr: {
+        label: "HSR",
+        lastValue: 220,
+        unit: "m",
+        history: [
+          { date: "2025-09-01", value: 210 },
+          { date: "2025-09-15", value: 215 },
+          { date: "2025-10-01", value: 220 },
+        ],
+      },
+      sprintLoad: {
+        label: "Sprints",
+        lastValue: 6,
+        unit: "nb",
+        history: [
+          { date: "2025-09-01", value: 5 },
+          { date: "2025-09-15", value: 6 },
+          { date: "2025-10-01", value: 6 },
+        ],
+      },
     },
-    etapesCles: "Imagerie initiale, avis chir, validation force, test plaquage progressif",
-  },
-  {
-    id: "B003",
-    joueurId: "J005",
-    dateBlessure: "2025-11-01",
-    diagnostic: "Entorse LLA cheville G",
-    localisation: "Cheville G",
-    segment: "Cheville",
-    phase: "Rééducation",
-    rttEstimee: "2025-11-20",
-    rttEffective: "",
-    rtpEstimee: "2025-11-27",
-    rtpEffective: "",
-    prochainesVisites: "Contrôle médecin 18/11",
-    prochainsTests: "KTW; test appui unipodal; tests terrain",
-    protocole: {
-      semaine1: "Décharge relative, contrôle œdème, mobilité douce",
-      semaine2: "Renfo proprioception, KTW progressif",
-      semaine3: "Course en ligne droite, changements appuis légers",
-      semaine4: "Drills spécifiques, appuis multidirectionnels",
+
+    injuries: [
+      {
+        id: "inj_commotion_2024",
+        label: "Commotion · 2024",
+        zone: "Crâne",
+        type: "Commotion cérébrale",
+        dateDebut: "2024-11-10",
+        dateRetour: "2024-12-05",
+        severite: "Modérée",
+        impact: "3 matchs manqués",
+        notes: "Protocole retour validé neuro.",
+        history: [
+          { date: "2024-11-10", etape: "Commotion match" },
+          { date: "2024-11-12", etape: "Consult neuro" },
+          { date: "2024-11-26", etape: "Retour entrainement adapté" },
+          { date: "2024-12-05", etape: "Retour match" },
+        ],
+      },
+    ],
+
+    tests: {
+      cervical_flex: { left: 205, right: 210 },
+      cervical_ext: { left: 230, right: 235 },
+      cervical_incl: { left: 198, right: 204 },
+
+      shoulder_ash: { left: 35, right: 36 },
+
+      knee_quad_iso: { left: 2.9, right: 3.0 },
+      knee_ham_mccall: { left: 7, right: 8 },
+      knee_ham_iso30: { left: 1.5, right: 1.6 },
+
+      ankle_soleus: { left: 3.1, right: 3.2 },
+      ankle_inv_evr: { left: 1.6, right: 1.7 },
+      ankle_gastro_hr: { left: 25, right: 26 },
     },
-    etapesCles: "KTW symétrique, test appui unipodal, test terrain 100%",
-  },
-  {
-    id: "B004",
-    joueurId: "J007",
-    dateBlessure: "2025-10-30",
-    diagnostic: "Lésion ischio semi-tendineux G grade 1",
-    localisation: "Ischio G",
-    segment: "Ischio",
-    phase: "Adapté / Reprise",
-    rttEstimee: "2025-11-12",
-    rttEffective: "",
-    rtpEstimee: "2025-11-19",
-    rtpEffective: "",
-    prochainesVisites: "PP + staff 15/11",
-    prochainsTests: "NordBoard; Sprint 30m; CMJ",
-    protocole: {
-      semaine1: "Isométriques, travail chaine postérieure léger",
-      semaine2: "Excentrique nordic, course 60%",
-      semaine3: "Sprints 80%, changements de direction, drills poste",
-      semaine4: "Sprints 90–95%, matchs d'entraînement",
-    },
-    etapesCles: "NordBoard >90% ref, sprint 90%, match amical",
-  },
-  {
-    id: "B005",
-    joueurId: "J006",
-    dateBlessure: "2024-09-15",
-    diagnostic: "Commotion cérébrale",
-    localisation: "Tête",
-    segment: "Tête",
-    phase: "Résolu",
-    rttEstimee: "2024-09-30",
-    rttEffective: "2024-09-28",
-    rtpEstimee: "2024-10-07",
-    rtpEffective: "2024-10-05",
-    prochainesVisites: "",
-    prochainsTests: "SCAT6, tests cognitifs",
-    protocole: {
-      semaine1: "Repos relatif, suivi symptômes",
-      semaine2: "Reprise vélo, course légère",
-      semaine3: "Intégration rugby sans contact",
-      semaine4: "Contact progressif, validation médicale",
-    },
-    etapesCles: "Asymptomatique au repos, asymptomatique à l'effort, validation neurologue",
   },
 ];
+// ================== FONCTIONS UTILITAIRES ================== 
 
-// ================== SEANCES REEDUC ==================
-
-const seances = [
-  { id: "S001", blessureId: "B001", joueurId: "J002", date: "2025-11-01", type: "Physio", resume: "Renfo ischio excentrique", rpe: 5, tolerance: "OK", commentaire: "Bonne séance" },
-  { id: "S002", blessureId: "B001", joueurId: "J002", date: "2025-11-04", type: "PPG / Prépa", resume: "CMJ + accélérations 60%", rpe: 6, tolerance: "Légère gêne", commentaire: "" },
-  { id: "S003", blessureId: "B002", joueurId: "J003", date: "2025-11-03", type: "Physio", resume: "Stabilité scapulaire + isométrie", rpe: 4, tolerance: "OK", commentaire: "" },
-  { id: "S004", blessureId: "B002", joueurId: "J003", date: "2025-11-07", type: "Reconditionnement", resume: "Travail contact léger", rpe: 5, tolerance: "OK", commentaire: "" },
-  { id: "S005", blessureId: "B003", joueurId: "J005", date: "2025-11-05", type: "Physio", resume: "Proprioception cheville + KTW", rpe: 4, tolerance: "OK", commentaire: "" },
-  { id: "S006", blessureId: "B004", joueurId: "J007", date: "2025-11-06", type: "PPG / Prépa", resume: "Sprint 70% + nordic léger", rpe: 6, tolerance: "OK", commentaire: "" },
-];
-
-// ================== GPS ==================
-
-const gpsData = [
-  { id: "G001", joueurId: "J001", semaine: "2025-W44", mois: "2025-11", match: true,  date: "2025-11-02", totalDistance: 6500, hsr: 600, sprint: 90, vmax: 9.0 },
-  { id: "G002", joueurId: "J001", semaine: "2025-W45", mois: "2025-11", match: false, date: "2025-11-06", totalDistance: 7200, hsr: 800, sprint: 120, vmax: 9.4 },
-  { id: "G003", joueurId: "J002", semaine: "2025-W44", mois: "2025-11", match: true,  date: "2025-10-28", totalDistance: 5800, hsr: 550, sprint: 80, vmax: 8.9 },
-  { id: "G004", joueurId: "J003", semaine: "2025-W45", mois: "2025-11", match: false, date: "2025-11-05", totalDistance: 4000, hsr: 200, sprint: 30, vmax: 8.1 },
-  { id: "G005", joueurId: "J007", semaine: "2025-W45", mois: "2025-11", match: true,  date: "2025-11-08", totalDistance: 6900, hsr: 780, sprint: 105, vmax: 9.3 },
-  { id: "G006", joueurId: "J008", semaine: "2025-W44", mois: "2025-11", match: true,  date: "2025-11-02", totalDistance: 7200, hsr: 820, sprint: 110, vmax: 9.1 },
-];
-
-// ================== UTILITAIRES ==================
-
-function getInitials(joueur) {
-  return `${(joueur.prenom[0] ?? "").toUpperCase()}${(joueur.nom[0] ?? "").toUpperCase()}`;
+function getInitials(player) {
+  return (player.prenom[0] + player.nom[0]).toUpperCase();
 }
 
-function getStatusBadgeClass(statut) {
-  switch (statut) {
-    case "Disponible":
-      return "badge badge-disponible";
-    case "Blessé":
-      return "badge badge-blesse";
-    case "Adapté":
-      return "badge badge-adapte";
-    default:
-      return "badge";
+function formatPoste(player) {
+  return `N°${player.poste} · ${player.ligne}`;
+}
+
+function computeSideDiff(left, right) {
+  const diffAbs = Math.abs(right - left);
+  const maxSide = Math.max(Math.abs(left), Math.abs(right));
+  const diffPct = maxSide > 0 ? (diffAbs / maxSide) * 100 : 0;
+  return { diffAbs, diffPct };
+}
+
+function computeRelativeToBodyWeight(value, poidsKg) {
+  if (!poidsKg || poidsKg <= 0) return null;
+  // Valeur par kg (approx) -> on laisse générique
+  return value / poidsKg;
+}
+
+function classifyVsTeam(avgSideValue, testId) {
+  const teamAvg = TEAM_TEST_AVERAGES[testId];
+  if (teamAvg == null) return { label: "Non comparé", className: "medium" };
+
+  const ratio = avgSideValue / teamAvg;
+  if (ratio >= 1.05) return { label: "Au-dessus moyenne groupe", className: "good" };
+  if (ratio <= 0.95) return { label: "Sous la moyenne groupe", className: "poor" };
+  return { label: "Dans la moyenne groupe", className: "medium" };
+}
+
+// Détruit un chart existant avant d'en recréer un
+function resetChart(key) {
+  const existing = chartsStore[key];
+  if (existing) {
+    existing.destroy();
+    chartsStore[key] = null;
   }
 }
-
-function getPhaseClass(phase) {
-  if (!phase) return "phase-pill";
-  const p = phase.toLowerCase();
-  if (p.includes("aigu")) return "phase-pill phase-aigu";
-  if (p.includes("rééducation")) return "phase-pill phase-reeeducation";
-  if (p.includes("reconditionnement")) return "phase-pill phase-recond";
-  if (p.includes("reprise") || p.includes("adapté")) return "phase-pill phase-reprise";
-  return "phase-pill";
-}
-
-function getZoneClass(zone) {
-  if (!zone) return "";
-  const z = zone.toLowerCase();
-  if (z.includes("vert")) return "flag-dot flag-vert";
-  if (z.includes("orange")) return "flag-dot flag-orange";
-  if (z.includes("rouge")) return "flag-dot flag-rouge";
-  return "flag-dot";
-}
-
-// tests où une valeur plus faible est meilleure (temps de sprint)
-function isLowerBetter(type) {
-  const t = type.toLowerCase();
-  return t.includes("sprint") || t.includes("10m") || t.includes("30m");
-}
-
-// tendances neutres (physique simple)
-function buildNeutralTrendIcon(current, previous) {
-  if (previous == null || current == null) return "";
-  let icon = "→";
-  if (current > previous) icon = "↑";
-  else if (current < previous) icon = "↓";
-  return `<span class="trend-neutral">${icon}</span>`;
-}
-
-function buildPerfTrendIcon(current, previous, higherIsBetter = true) {
-  if (previous == null || current == null) return "";
-  let trendClass = "trend-neutral";
-  let icon = "→";
-  if (higherIsBetter) {
-    if (current > previous) {
-      trendClass = "trend-up";
-      icon = "↑";
-    } else if (current < previous) {
-      trendClass = "trend-down";
-      icon = "↓";
-    }
-  } else {
-    if (current < previous) {
-      trendClass = "trend-up";
-      icon = "↑";
-    } else if (current > previous) {
-      trendClass = "trend-down";
-      icon = "↓";
-    }
-  }
-  return `<span class="${trendClass}">${icon}</span>`;
-}
-
-// toggle des "section-card"
-function initSectionCardToggles(root) {
-  const scope = root || document;
-  scope.querySelectorAll(".section-card").forEach((card) => {
-    const header = card.querySelector(".section-header");
-    if (!header) return;
-    header.addEventListener("click", () => {
-      card.classList.toggle("open");
-    });
-  });
-}
-
-// Toggles "Voir l'historique" (déjà dans ta première version, je garde le principe)
-function initSubToggles(root) {
-  const scope = root || document;
-  scope.querySelectorAll(".subtoggle").forEach((btn) => {
-    const targetId = btn.getAttribute("data-target");
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const isActive = target.classList.contains("active");
-      if (isActive) {
-        target.classList.remove("active");
-        btn.textContent = "Voir l'historique";
-      } else {
-        target.classList.add("active");
-        btn.textContent = "Masquer l'historique";
-      }
-    });
-  });
-}
-
-// ================== STATS HEADER ==================
-
-function renderStats() {
-  const dispoCount = joueurs.filter((j) => j.disponibilite === "Disponible").length;
-  const injuryCount = joueurs.filter((j) => j.disponibilite === "Infirmerie").length;
-  document.getElementById("stat-disponibles").textContent = dispoCount;
-  document.getElementById("stat-infirmerie").textContent = injuryCount;
-}
-
-// ================== LISTE JOUEURS ==================
-
-function createAvatar(joueur, baseClass) {
-  const avatar = document.createElement("div");
-  avatar.className = baseClass;
-  if (joueur.photoUrl) {
-    const img = document.createElement("img");
-    img.src = joueur.photoUrl;
-    img.alt = `${joueur.prenom} ${joueur.nom}`;
-    avatar.appendChild(img);
-  } else {
-    avatar.textContent = getInitials(joueur);
-  }
-  return avatar;
-}
+// ================== RENDU LISTE JOUEURS ================== 
 
 function renderPlayersList() {
-  const filter = document.getElementById("filterSelect").value;
   const container = document.getElementById("playersList");
-  container.innerHTML = "";
-
-  let filtered = [...joueurs];
-
-  if (filter === "available") {
-    filtered = filtered.filter((j) => j.disponibilite === "Disponible");
-  } else if (filter === "injury") {
-    filtered = filtered.filter((j) => j.disponibilite === "Infirmerie");
-  }
-
-  // Filtre texte : nom / prénom / poste / ligne
-  if (searchTerm && searchTerm.trim() !== "") {
-    const query = searchTerm.toLowerCase();
-    filtered = filtered.filter((j) => {
-      const fullName = `${j.prenom} ${j.nom}`.toLowerCase();
-      const poste = `poste ${j.poste}`.toLowerCase();
-      const ligne = (j.ligne || "").toLowerCase();
-      return fullName.includes(query) || poste.includes(query) || ligne.includes(query);
-    });
-  }
-
-  filtered.forEach((j) => {
-    const card = document.createElement("div");
-    card.className = "player-card" + (currentPlayerId === j.id ? " active" : "");
-    card.addEventListener("click", () => {
-      currentPlayerId = j.id;
-      selectedSegment = "Global";
-      selectedTestId = null;
-      activeFunctionalMetric = null;
-      activeCourseMetric = null;
-      activeJumpMetric = null;
-      renderPlayersList();
-      renderPlayerDetail(j.id);
-    });
-
-    const avatar = createAvatar(j, "player-avatar");
-
-    const main = document.createElement("div");
-    main.className = "player-main";
-
-    const name = document.createElement("div");
-    name.className = "player-name";
-    name.textContent = `${j.prenom} ${j.nom}`;
-
-    const sub = document.createElement("div");
-    sub.className = "player-sub";
-    sub.textContent = `Poste ${j.poste} • ${j.ligne}`;
-
-    main.appendChild(name);
-    main.appendChild(sub);
-
-    const badge = document.createElement("span");
-    badge.className = getStatusBadgeClass(j.statut);
-    badge.textContent = j.statut;
-
-    card.appendChild(avatar);
-    card.appendChild(main);
-    card.appendChild(badge);
-    container.appendChild(card);
-  });
-
-  if (filtered.length === 0) {
-    container.innerHTML = "<p style='font-size:0.85rem;color:#cbd5f5;'>Aucun joueur ne correspond à ce filtre.</p>";
-  }
-}
-
-// ================== FICHE JOUEUR ==================
-
-function renderPlayerDetail(id) {
-  const joueur = joueurs.find((j) => j.id === id);
-  if (!joueur) return;
-
-  const detail = document.getElementById("playerDetail");
-  detail.classList.remove("empty-state");
-  detail.innerHTML = "";
-
-  // HEADER "CARTE FIFA"
-  const headerCard = document.createElement("div");
-  headerCard.className = "player-header-card";
-
-  const avatar = createAvatar(joueur, "ph-avatar");
-
-  const phMain = document.createElement("div");
-  phMain.className = "ph-main";
-
-  const phName = document.createElement("div");
-  phName.className = "ph-name";
-  phName.textContent = `${joueur.prenom} ${joueur.nom}`;
-
-  const phBirth = document.createElement("div");
-  phBirth.className = "ph-meta";
-  phBirth.textContent = joueur.dateNaissance ? `Né le ${joueur.dateNaissance}` : "";
-
-  const phSub = document.createElement("div");
-  phSub.className = "ph-sub";
-  phSub.textContent = `Poste ${joueur.poste} • ${joueur.ligne}`;
-
-  const phTags = document.createElement("div");
-  phTags.className = "ph-tags";
-
-  const tagStatut = document.createElement("span");
-  tagStatut.className = "ph-tag";
-  tagStatut.textContent = joueur.statut;
-
-  const tagMinutes = document.createElement("span");
-  tagMinutes.className = "ph-tag";
-  tagMinutes.textContent = `Minutes jouées : ${joueur.minutesJouees ?? "-"}`;
-
-  phTags.appendChild(tagStatut);
-  phTags.appendChild(tagMinutes);
-
-  phMain.appendChild(phName);
-  phMain.appendChild(phBirth);
-  phMain.appendChild(phSub);
-  phMain.appendChild(phTags);
-
-  const phScore = document.createElement("div");
-  phScore.className = "ph-score";
-  const scoreValue = document.createElement("div");
-  scoreValue.className = "ph-score-value";
-  scoreValue.textContent = joueur.scoreGlobal ?? "-";
-  const scoreLabel = document.createElement("div");
-  scoreLabel.className = "ph-score-label";
-  scoreLabel.textContent = "Indice global";
-  phScore.appendChild(scoreValue);
-  phScore.appendChild(scoreLabel);
-
-  headerCard.appendChild(avatar);
-  headerCard.appendChild(phMain);
-  headerCard.appendChild(phScore);
-  detail.appendChild(headerCard);
-
-  // === Sous-blocs dans l'ordre demandé ===
-
-  renderPhysicalSection(detail, joueur);          // Profil physique
-  renderGpsSection(detail, joueur);               // Performance GPS
-  renderInjuryOverviewSection(detail, joueur);    // Antécédents blessures
-  renderFunctionalSection(detail, joueur);        // Tests fonctionnels globaux
-  renderRunningTestsSection(detail, joueur);      // Tests de course
-  renderJumpTestsSection(detail, joueur);         // Tests de saut
-  renderForceVelocitySection(detail, joueur);     // Profil F-V
-  renderAnatomicalZonesSection(detail, joueur);   // Zones anatomiques + tests
-
-  // Rééducation uniquement pour joueurs blessés / adaptés
-  if (joueur.statut !== "Disponible") {
-    renderBlessureSection(detail, joueur);
-  }
-
-  // Active les toggles des sections
-  initSectionCardToggles(detail);
-  initSubToggles(detail);
-}
-
-// ================== PROFIL PHYSIQUE ==================
-
-function getMorphoHistory(joueur) {
-  // Historique artificiel sur 4 dates pour un rendu plus visuel
-  const baseDate = new Date(joueur.dernierTest || "2025-11-01");
-  const dates = [-90, -60, -30, 0].map((d) => {
-    const tmp = new Date(baseDate);
-    tmp.setDate(tmp.getDate() + d);
-    return tmp.toISOString().slice(0, 10);
-  });
-  const values = [];
-  for (let i = 0; i < dates.length; i++) {
-    values.push({
-      date: dates[i],
-      taille: joueur.taille ?? null,
-      poids: joueur.poids != null ? joueur.poids - (3 - i) * 0.5 : null,
-      masseGrasse: joueur.masseGrasse != null ? joueur.masseGrasse + (3 - i) * 0.2 : null,
-    });
-  }
-  // Dernier point = valeur actuelle exacte
-  values[values.length - 1].poids = joueur.poids ?? null;
-  values[values.length - 1].masseGrasse = joueur.masseGrasse ?? null;
-  return values;
-}
-
-function renderPhysicalSection(detail, joueur) {
-  const history = getMorphoHistory(joueur);
-  const current = history[history.length - 1];
-  const prev = history[history.length - 2] || current;
-  const historyId = `physical-history-${joueur.id}`;
-  const canvasId = `morpho-canvas-${joueur.id}`;
-
-  const card = document.createElement("div");
-  card.className = "section-card open";
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Profil physique</div>
-        <div class="section-title-sub">Taille, poids, % masse grasse · dernière mesure ${current.date}</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="two-columns">
-        <div class="info-card">
-          <div class="info-label">Taille</div>
-          <div class="info-value">${current.taille ?? "-"} cm</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">Poids</div>
-          <div class="info-value">
-            ${current.poids ?? "-"} kg
-            ${buildNeutralTrendIcon(current.poids, prev.poids)}
-          </div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">% masse grasse (estimée)</div>
-          <div class="info-value">
-            ${current.masseGrasse ?? "-"} %
-            ${buildNeutralTrendIcon(current.masseGrasse, prev.masseGrasse)}
-          </div>
-        </div>
-      </div>
-      <div class="section-canvas-wrapper">
-        <canvas id="${canvasId}" width="420" height="120"></canvas>
-      </div>
-    </div>
-    <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique des mesures</div>
-          <table class="table-like" style="margin-top:4px;">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Taille (cm)</th>
-                <th>Poids (kg)</th>
-                <th>% MG</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${history
-                .map(
-                  (h) => `
-                <tr>
-                  <td>${h.date}</td>
-                  <td>${h.taille ?? "-"}</td>
-                  <td>${h.poids ?? "-"}</td>
-                  <td>${h.masseGrasse ?? "-"}</td>
-                </tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-
-  const canvas = card.querySelector(`#${canvasId}`);
-  if (canvas) {
-    drawMorphoChart(canvas, history);
-  }
-}
-
-function drawMorphoChart(canvas, history) {
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const padding = 24;
-  const w = canvas.width - padding * 2;
-  const h = canvas.height - padding * 2;
-
-  const weights = history.map((h) => h.poids).filter((v) => v != null);
-  if (weights.length === 0) return;
-  const minW = Math.min(...weights);
-  const maxW = Math.max(...weights);
-
-  ctx.strokeStyle = "#cbd5f5";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding, padding);
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding + w, padding + h);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#ff2e9a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  history.forEach((pt, idx) => {
-    if (pt.poids == null) return;
-    const x = padding + (w * idx) / (history.length - 1 || 1);
-    const norm = (pt.poids - minW) / (maxW - minW || 1);
-    const y = padding + h - norm * h;
-    if (idx === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = "#ff2e9a";
-  history.forEach((pt, idx) => {
-    if (pt.poids == null) return;
-    const x = padding + (w * idx) / (history.length - 1 || 1);
-    const norm = (pt.poids - minW) / (maxW - minW || 1);
-    const y = padding + h - norm * h;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "10px system-ui";
-  ctx.fillText("Evolution du poids (kg)", padding, padding - 6);
-}
-
-// ================== PERFORMANCE GPS ==================
-
-function renderGpsSection(detail, joueur) {
-  const data = gpsData.filter((g) => g.joueurId === joueur.id);
-  const card = document.createElement("div");
-  card.className = "section-card open gps-section";
-
-  const detailId = `gps-detail-${joueur.id}`;
-
-  if (!data.length) {
-    card.innerHTML = `
-      <div class="section-header">
-        <div class="section-header-left">
-          <div class="section-title-main">Performance GPS</div>
-          <div class="section-title-sub">Aucune donnée enregistrée</div>
-        </div>
-        <div class="section-toggle-icon">▶</div>
-      </div>
-      <div class="section-summary">
-        <div class="section-content">Pas de données GPS pour ce joueur.</div>
-      </div>
-    `;
-    detail.appendChild(card);
-    return;
-  }
-
-  const sortedByDate = [...data].sort((a, b) => (a.date > b.date ? 1 : -1));
-  const last = sortedByDate[sortedByDate.length - 1];
-  const prev = sortedByDate.length > 1 ? sortedByDate[sortedByDate.length - 2] : null;
-
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Performance GPS</div>
-        <div class="section-title-sub">Dernière séance : ${last.date}</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="metrics-row metrics-row-large">
-        <div class="metric-pill metric-pill-main" data-gps="distance">
-          <span class="metric-label">Distance totale</span>
-          <span class="metric-value">${last.totalDistance} m</span>
-          ${prev ? buildPerfTrendIcon(last.totalDistance, prev.totalDistance, true) : ""}
-        </div>
-        <div class="metric-pill metric-pill-main" data-gps="hsr">
-          <span class="metric-label">HSR</span>
-          <span class="metric-value">${last.hsr} m</span>
-          ${prev ? buildPerfTrendIcon(last.hsr, prev.hsr, true) : ""}
-        </div>
-        <div class="metric-pill metric-pill-main" data-gps="sprint">
-          <span class="metric-label">Sprint</span>
-          <span class="metric-value">${last.sprint} m</span>
-          ${prev ? buildPerfTrendIcon(last.sprint, prev.sprint, true) : ""}
-        </div>
-        <div class="metric-pill metric-pill-main" data-gps="vmax">
-          <span class="metric-label">Vmax</span>
-          <span class="metric-value">${last.vmax ?? "-"} m/s</span>
-          ${prev ? buildPerfTrendIcon(last.vmax ?? 0, prev.vmax ?? 0, true) : ""}
-        </div>
-      </div>
-    </div>
-    <div class="section-body">
-      <div id="${detailId}" class="section-detail-panel section-detail-empty">
-        <div class="section-detail-placeholder">
-          Clique sur une bulle pour afficher l'historique GPS (graphique + tableau).
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-
-  const detailContainer = document.getElementById(detailId);
-
-  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
-    pill.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const key = pill.getAttribute("data-gps");
-      if (!detailContainer) return;
-
-      const currentMetric = detailContainer.getAttribute("data-active-metric");
-
-      // Si on re-clique sur la même bulle -> on rétracte
-      if (currentMetric === key) {
-        card.querySelectorAll(".metric-pill-main").forEach((p) =>
-          p.classList.remove("metric-pill-active")
-        );
-        detailContainer.classList.add("section-detail-empty");
-        detailContainer.removeAttribute("data-active-metric");
-        detailContainer.innerHTML = `
-          <div class="section-detail-placeholder">
-            Clique sur une bulle pour afficher l'historique GPS (graphique + tableau).
-          </div>
-        `;
-        return;
-      }
-
-      // Sinon on ouvre / change de métrique
-      card.classList.add("open");
-      card.querySelectorAll(".metric-pill-main").forEach((p) =>
-        p.classList.remove("metric-pill-active")
-      );
-      pill.classList.add("metric-pill-active");
-      detailContainer.setAttribute("data-active-metric", key);
-      renderGpsDetail(joueur, key, detailId);
-    });
-  });
-}
-
-function renderGpsDetail(joueur, key, containerId) {
-  const container = document.getElementById(containerId);
   if (!container) return;
 
-  const data = gpsData
-    .filter((g) => g.joueurId === joueur.id)
-    .sort((a, b) => (a.date > b.date ? 1 : -1));
+  const term = (searchTerm || "").toLowerCase();
 
-  if (!data.length) {
-    container.innerHTML = "<div class='section-content'>Pas de données GPS.</div>";
-    return;
-  }
+  const filtered = players.filter((p) => {
+    // filtre ligne
+    if (currentLineFilter === "Avants" && p.ligne !== "Avants") return false;
+    if (currentLineFilter === "Trois-quarts" && p.ligne !== "Trois-quarts") return false;
 
-  let label, extractor, unit;
-  if (key === "distance") {
-    label = "Distance totale (m)";
-    extractor = (d) => d.totalDistance;
-    unit = "m";
-  } else if (key === "hsr") {
-    label = "HSR (m)";
-    extractor = (d) => d.hsr;
-    unit = "m";
-  } else if (key === "sprint") {
-    label = "Distance sprint (m)";
-    extractor = (d) => d.sprint;
-    unit = "m";
-  } else {
-    label = "Vmax (m/s)";
-    extractor = (d) => d.vmax;
-    unit = "m/s";
-  }
+    // filtre dispo
+    if (currentStatusFilter === "Disponible" && p.statut !== "Disponible") return false;
+    if (currentStatusFilter === "Blessé" && p.statut === "Disponible") return false;
 
-  const series = data
-    .map((d) => ({ date: d.date, value: extractor(d) }))
-    .filter((s) => s.value != null);
-
-  const values = series.map((s) => s.value);
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const last = values[values.length - 1];
-
-  const rows = series
-    .map(
-      (s) => `
-      <tr>
-        <td>${s.date}</td>
-        <td>${s.value} ${unit}</td>
-      </tr>`
-    )
-    .join("");
-
-  const canvasId = `gps-metric-canvas-${joueur.id}-${key}`;
-
-  container.classList.remove("section-detail-empty");
-  container.innerHTML = `
-    <div class="section-detail-header">
-      <div>
-        <div class="section-detail-title">${label}</div>
-        <div class="section-detail-sub">Historique des séances GPS</div>
-      </div>
-      <div class="section-detail-kpi">
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Dernière valeur</span>
-          <span class="info-value">${last} ${unit}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Min / Max</span>
-          <span class="info-value">${min} / ${max} ${unit}</span>
-        </div>
-      </div>
-    </div>
-    <div class="section-detail-body">
-      <div class="section-detail-chart">
-        <canvas id="${canvasId}" width="420" height="160"></canvas>
-      </div>
-      <div class="section-detail-table">
-        <table class="table-like">
-          <thead><tr><th>Date</th><th>${label}</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  const canvas = document.getElementById(canvasId);
-  if (canvas) {
-    drawSimpleLineChart(canvas, series, label);
-  }
-}
-
-function drawGpsChart(canvas, data) {
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const padding = 24;
-  const w = canvas.width - padding * 2;
-  const h = canvas.height - padding * 2;
-
-  const distances = data.map((d) => d.totalDistance);
-  const minD = Math.min(...distances);
-  const maxD = Math.max(...distances);
-
-  ctx.strokeStyle = "#cbd5f5";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding, padding);
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding + w, padding + h);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#ff2e9a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  data.forEach((d, idx) => {
-    const x = padding + (w * idx) / (data.length - 1 || 1);
-    const norm = (d.totalDistance - minD) / (maxD - minD || 1);
-    const y = padding + h - norm * h;
-    if (idx === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = "#ff2e9a";
-  data.forEach((d, idx) => {
-    const x = padding + (w * idx) / (data.length - 1 || 1);
-    const norm = (d.totalDistance - minD) / (maxD - minD || 1);
-    const y = padding + h - norm * h;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "10px system-ui";
-  ctx.fillText("Evolution distance totale (m)", padding, padding - 6);
-}
-
-// ================== ANTECEDENTS DE BLESSURES ==================
-
-function renderInjuryOverviewSection(detail, joueur) {
-  const playerBlessures = blessures
-    .filter((b) => b.joueurId === joueur.id)
-    .sort((a, b) => (a.dateBlessure > b.dateBlessure ? -1 : 1));
-
-  const card = document.createElement("div");
-  card.className = "section-card open";
-
-  const historyId = `injury-history-${joueur.id}`;
-
-  if (playerBlessures.length === 0) {
-    const hasCommotion = (joueur.antecedents || "").toLowerCase().includes("commotion");
-    card.innerHTML = `
-      <div class="section-header">
-        <div class="section-header-left">
-          <div class="section-title-main">Antécédents de blessures</div>
-          <div class="section-title-sub">Aucune blessure enregistrée dans le système</div>
-        </div>
-        <div class="section-toggle-icon">▶</div>
-      </div>
-      <div class="section-summary">
-        <div class="section-content">
-          ${
-            hasCommotion
-              ? "Antécédent de commotion mentionné dans l'anamnèse mais non renseigné en détail."
-              : "Pas d'antécédents de blessure renseignés."
-          }
-        </div>
-      </div>
-    `;
-    detail.appendChild(card);
-    return;
-  }
-
-  const lastInjury = playerBlessures[0];
-
-  // total days off
-  let totalDays = 0;
-  const rows = playerBlessures
-    .map((b) => {
-      const start = new Date(b.dateBlessure);
-      const endDateStr = b.rtpEffective || b.rtpEstimee || b.rttEstimee || new Date().toISOString().slice(0, 10);
-      const end = new Date(endDateStr);
-      const diffDays = Math.max(Math.round((end - start) / (1000 * 60 * 60 * 24)), 0);
-      totalDays += diffDays;
-      return `
-        <tr>
-          <td>${b.dateBlessure}</td>
-          <td>${b.diagnostic}</td>
-          <td>${b.localisation}</td>
-          <td>${diffDays} j</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  // résumé par zone anatomique
-  const byZone = {};
-  playerBlessures.forEach((b) => {
-    if (!byZone[b.segment]) {
-      byZone[b.segment] = { nb: 0, days: 0 };
+    // recherche texte
+    if (term) {
+      const haystack = `${p.nom} ${p.prenom} ${p.poste} ${p.ligne}`.toLowerCase();
+      if (!haystack.includes(term)) return false;
     }
-    const start = new Date(b.dateBlessure);
-    const endDateStr = b.rtpEffective || b.rtpEstimee || b.rttEstimee || new Date().toISOString().slice(0, 10);
-    const end = new Date(endDateStr);
-    const diffDays = Math.max(Math.round((end - start) / (1000 * 60 * 60 * 24)), 0);
-    byZone[b.segment].nb += 1;
-    byZone[b.segment].days += diffDays;
+
+    return true;
   });
 
-  const zoneCards = Object.entries(byZone)
-    .map(([seg, info]) => {
-      let intensityClass = "asym-green";
-      if (info.days > 40) intensityClass = "asym-red";
-      else if (info.days > 20) intensityClass = "asym-orange";
+  container.innerHTML = filtered
+    .map((p) => {
+      const isSelected = p.id === currentPlayerId;
+      const badgeClass = p.statut === "Disponible" ? "badge-disponible" : "badge-blesse";
+
       return `
-        <div class="injury-zone-card">
-          <div class="injury-zone-title">${seg}</div>
-          <div class="injury-zone-days">${info.nb} blessure(s)</div>
-          <div class="${intensityClass}" style="margin-top:4px;display:inline-block;">${info.days} j au total</div>
+        <div class="player-row ${isSelected ? "is-selected" : ""}" data-player-id="${p.id}">
+          <div class="player-initials">${getInitials(p)}</div>
+          <div class="player-row-main">
+            <div class="player-row-name">${p.prenom} ${p.nom}</div>
+            <div class="player-row-meta">${formatPoste(p)}</div>
+          </div>
+          <div class="player-row-status ${badgeClass}">
+            ${p.statut}
+          </div>
         </div>
       `;
     })
     .join("");
 
-  const hasCommotion = playerBlessures.some((b) => b.segment === "Tête") || (joueur.antecedents || "").toLowerCase().includes("commotion");
+  // Stats effectif
+  const dispo = players.filter((p) => p.statut === "Disponible").length;
+  const blesse = players.length - dispo;
+  const dispoEl = document.getElementById("countDisponible");
+  const blesseEl = document.getElementById("countBlesses");
+  if (dispoEl) dispoEl.textContent = dispo;
+  if (blesseEl) blesseEl.textContent = blesse;
 
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Antécédents de blessures</div>
-        <div class="section-title-sub">Dernière blessure : ${lastInjury.diagnostic} (${lastInjury.dateBlessure})</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="two-columns">
-        <div class="info-card">
-          <div class="info-label">Dernière pathologie</div>
-          <div class="info-value">${lastInjury.diagnostic}</div>
-          <div class="info-label">Localisation</div>
-          <div class="info-value">${lastInjury.localisation}</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">Impact global</div>
-          <div class="info-value">${totalDays} jours d'absence cumulés</div>
-          ${
-            hasCommotion
-              ? '<div class="info-label" style="margin-top:4px;">Antécédents de commotion présents</div>'
-              : ""
-          }
-        </div>
-      </div>
-      <div class="injury-zones-grid" style="margin-top:8px;">
-        ${zoneCards}
-      </div>
-    </div>
-    <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir l'historique</button>
-      <div id="${historyId}" class="section-body-details">
-        <div class="info-card">
-          <div class="info-label">Historique détaillé par blessure</div>
-          <table class="table-like" style="margin-top:4px;">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Diagnostic</th>
-                <th>Zone</th>
-                <th>Jours d'absence</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-}
-
-// ================== TESTS FONCTIONNELS GLOBAUX (UPPER / LOWER) ==================
-
-function getFunctionalHistorySynthetic(joueur) {
-  const base = testsFonctionnels.find((t) => t.joueurId === joueur.id);
-  if (!base) return [];
-  const baseDate = new Date(joueur.dernierTest || "2025-11-01");
-  const dates = [-90, -60, -30, 0].map((d) => {
-    const tmp = new Date(baseDate);
-    tmp.setDate(tmp.getDate() + d);
-    return tmp.toISOString().slice(0, 10);
-  });
-  const history = [];
-  dates.forEach((date, idx) => {
-    const factor = 1 - (3 - idx) * 0.03; // léger progrès
-    history.push({
-      date,
-      dc1rm: Math.round(base.dc1rm * factor),
-      tirage1rm: Math.round(base.tirage1rm * factor),
-      tractions: Math.round(base.tractions * factor),
-      grip: Math.round(base.grip * factor),
-      squat1rm: Math.round(base.squat1rm * factor),
-      imtp: Math.round(base.imtp * factor),
-      f1080: +(base.f1080 * factor).toFixed(2),
-      vmax: +(base.vmax * factor).toFixed(2),
+  // Binding clic
+  container.querySelectorAll(".player-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const id = row.getAttribute("data-player-id");
+      selectPlayer(id);
     });
   });
-  // dernier = valeur actuelle exacte
-  const last = history[history.length - 1];
-  Object.assign(last, base, { date: dates[dates.length - 1] });
-  return history;
 }
 
-// ================== TESTS FONCTIONNELS GLOBAUX (UPPER / LOWER) ==================
-
-function renderFunctionalSection(detail, joueur) {
-  const data = testsFonctionnels.find((t) => t.joueurId === joueur.id);
-  const history = getFunctionalHistorySynthetic(joueur);
-  const current = history[history.length - 1];
-  const prev = history[history.length - 2] || current;
-  const detailId = `functional-detail-${joueur.id}`;
-
-  const card = document.createElement("div");
-  card.className = "section-card open functional-section";
-
-  if (!data) {
-    card.innerHTML = `
-      <div class="section-header">
-        <div class="section-header-left">
-          <div class="section-title-main">Tests fonctionnels globaux</div>
-          <div class="section-title-sub">Aucun test renseigné</div>
-        </div>
-        <div class="section-toggle-icon">▶</div>
-      </div>
-      <div class="section-summary">
-        <div class="section-content">Tests fonctionnels à compléter.</div>
-      </div>
-    `;
-    detail.appendChild(card);
-    return;
+function selectPlayer(playerId) {
+  currentPlayerId = playerId;
+  const player = players.find((p) => p.id === playerId);
+  const breadcrumbEl = document.getElementById("breadcrumbPlayer");
+  if (breadcrumbEl && player) {
+    breadcrumbEl.textContent = `${player.prenom} ${player.nom}`;
   }
+  renderPlayersList();
+  renderPlayerDetail(player);
+}
 
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Tests fonctionnels globaux</div>
-        <div class="section-title-sub">Membre supérieur / membre inférieur</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="metrics-row metrics-row-large">
-        <div class="metric-pill metric-pill-main" data-metric="dc1rm">
-          <span class="metric-label">DC 1RM</span>
-          <span class="metric-value">${current.dc1rm} kg</span>
-          ${buildPerfTrendIcon(current.dc1rm, prev.dc1rm, true)}
-        </div>
-        <div class="metric-pill metric-pill-main" data-metric="tirage1rm">
-          <span class="metric-label">Tirage 1RM</span>
-          <span class="metric-value">${current.tirage1rm} kg</span>
-          ${buildPerfTrendIcon(current.tirage1rm, prev.tirage1rm, true)}
-        </div>
-        <div class="metric-pill metric-pill-main" data-metric="tractions">
-          <span class="metric-label">Tractions</span>
-          <span class="metric-value">${current.tractions}</span>
-          ${buildPerfTrendIcon(current.tractions, prev.tractions, true)}
-        </div>
-        <div class="metric-pill metric-pill-main" data-metric="grip">
-          <span class="metric-label">Force grip</span>
-          <span class="metric-value">${current.grip} kg</span>
-          ${buildPerfTrendIcon(current.grip, prev.grip, true)}
-        </div>
-      </div>
-      <div class="metrics-row metrics-row-large" style="margin-top:10px;">
-        <div class="metric-pill metric-pill-main" data-metric="squat1rm">
-          <span class="metric-label">Squat 1RM</span>
-          <span class="metric-value">${current.squat1rm} kg</span>
-          ${buildPerfTrendIcon(current.squat1rm, prev.squat1rm, true)}
-        </div>
-        <div class="metric-pill metric-pill-main" data-metric="imtp">
-          <span class="metric-label">IMTP</span>
-          <span class="metric-value">${current.imtp} N</span>
-          ${buildPerfTrendIcon(current.imtp, prev.imtp, true)}
-        </div>
-      </div>
-    </div>
-    <div class="section-body">
-      <div id="${detailId}" class="section-detail-panel section-detail-empty">
-        <div class="section-detail-placeholder">
-          Clique sur une bulle pour afficher l'historique complet et la comparaison au groupe.
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
+// ================== RENDU HEADER JOUEUR ================== 
 
-  const detailContainer = document.getElementById(detailId);
-  // clic sur les bulles
-  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
-    pill.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const metric = pill.getAttribute("data-metric");
-      if (!detailContainer) return;
+function renderPlayerHeader(player) {
+  const statutClass = player.statut === "Disponible" ? "disponible" : "blesse";
+  const dispoLabel = player.disponibilite || (player.statut === "Disponible" ? "Apte" : "Adapté");
 
-      const currentMetric = detailContainer.getAttribute("data-active-metric");
-
-      // Si on re-clique sur la même bulle -> on rétracte
-      if (currentMetric === metric) {
-        card.querySelectorAll(".metric-pill-main").forEach((p) =>
-          p.classList.remove("metric-pill-active")
-        );
-        detailContainer.classList.add("section-detail-empty");
-        detailContainer.removeAttribute("data-active-metric");
-        detailContainer.innerHTML = `
-          <div class="section-detail-placeholder">
-            Clique sur une bulle pour afficher l'historique complet et la comparaison au groupe.
+  return `
+    <div class="player-header-card">
+      <div class="ph-left">
+        <div class="ph-avatar" style="${player.photoUrl ? `background-image:url('${player.photoUrl}')` : ""}"></div>
+        <div class="ph-infos">
+          <h2 class="ph-name">${player.prenom} ${player.nom}</h2>
+          <p class="ph-poste">${formatPoste(player)}</p>
+          <div class="ph-badges">
+            <span class="badge-pill">${player.taille} cm</span>
+            <span class="badge-pill">${player.poids} kg</span>
+            <span class="badge-pill">${player.masseGrasse}% MG</span>
           </div>
-        `;
-        return;
-      }
+        </div>
+      </div>
 
-      // Sinon on ouvre / change de métrique
-      card.classList.add("open"); // ouvre la section si fermée
-      card.querySelectorAll(".metric-pill-main").forEach((p) =>
-        p.classList.remove("metric-pill-active")
-      );
-      pill.classList.add("metric-pill-active");
-      detailContainer.setAttribute("data-active-metric", metric);
-      renderFunctionalMetricHistory(joueur, metric, detailId);
-    });
-  });
+      <div class="ph-middle">
+        <div class="ph-tags-row">
+          <span class="ph-tag">Minutes jouées : ${player.minutesJouees}</span>
+          <span class="ph-tag">Risque profil : ${player.risqueProfil}</span>
+          <span class="ph-tag">Points forts : ${player.pointsForts}</span>
+          <span class="ph-tag">À surveiller : ${player.pointsFaibles}</span>
+        </div>
+        <div class="ph-metrics">
+          <div class="ph-metric">
+            <div class="ph-metric-label">Disponibilité</div>
+            <div class="ph-metric-value">${dispoLabel}</div>
+          </div>
+          <div class="ph-metric">
+            <div class="ph-metric-label">Antécédents</div>
+            <div class="ph-metric-value">${player.antecedentsTexte}</div>
+          </div>
+          <div class="ph-metric">
+            <div class="ph-metric-label">Profil physique</div>
+            <div class="ph-metric-value">${player.physicalProfile.speed.lastValue.toFixed(1)} m/s · vitesse</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ph-right">
+        <div class="ph-availability">
+          <span class="badge-status ${statutClass}">${player.statut}</span>
+        </div>
+        <div class="ph-score">
+          <div class="ph-score-card">
+            <div class="ph-score-label">Score global</div>
+            <div class="ph-score-value">${player.scoreGlobal}</div>
+          </div>
+        </div>
+        <div>
+          <span class="ph-risk-tag">
+            Profil risque ${player.risqueProfil}
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
 }
+// ================== RENDU SECTIONS BULLES ================== 
 
-function renderFunctionalMetricHistory(joueur, metricKey, containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  const history = getFunctionalHistorySynthetic(joueur);
-  const labelMap = {
-    dc1rm: "DC 1RM (kg)",
-    tirage1rm: "Tirage 1RM (kg)",
-    tractions: "Tractions (reps)",
-    grip: "Force grip (kg)",
-    squat1rm: "Squat 1RM (kg)",
-    imtp: "IMTP (N)",
-  };
-  const label = labelMap[metricKey] || metricKey;
-
-  const values = history.map((h) => h[metricKey]).filter((v) => v != null);
-  if (!values.length) {
-    container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
-    return;
-  }
-
-  const maxPerf = Math.max(...values);
-  const lastValue = values[values.length - 1];
-
-  // moyenne groupe sur ce test (snapshot actuel)
-  const peers = testsFonctionnels
-    .map((t) => t[metricKey])
-    .filter((v) => typeof v === "number");
-  const groupMean = peers.length
-    ? peers.reduce((a, b) => a + b, 0) / peers.length
-    : null;
-
-  const rows = history
-    .map(
-      (h) => `
-    <tr>
-      <td>${h.date}</td>
-      <td>${h[metricKey]}</td>
-    </tr>`
-    )
+function renderPhysicalSection(player) {
+  const metrics = player.physicalProfile || {};
+  const bubblesHtml = Object.keys(metrics)
+    .map((key) => {
+      const m = metrics[key];
+      const isActive = activePhysicalMetric === key;
+      return `
+        <button class="metric-bubble physical ${isActive ? "is-active" : ""}" data-physical-id="${key}">
+          <span>${m.label}</span>
+          <small>${m.lastValue} ${m.unit}</small>
+        </button>
+      `;
+    })
     .join("");
 
-  const canvasId = `functional-metric-canvas-${joueur.id}-${metricKey}`;
+  const detailHtml = activePhysicalMetric
+    ? renderMetricDetail("physical", metrics[activePhysicalMetric])
+    : "";
 
-  container.classList.remove("section-detail-empty");
-  container.innerHTML = `
-    <div class="section-detail-header">
-      <div>
-        <div class="section-detail-title">${label}</div>
-        <div class="section-detail-sub">Historique des mesures pour ${joueur.prenom} ${joueur.nom}</div>
-      </div>
-      <div class="section-detail-kpi">
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Dernière valeur</span>
-          <span class="info-value">${lastValue}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Meilleure perf</span>
-          <span class="info-value">${maxPerf}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Moyenne groupe</span>
-          <span class="info-value">${
-            groupMean ? groupMean.toFixed(1) : "-"
-          }</span>
+  return `
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-block">
+          <h3>Profil physique</h3>
+          <p>Vue synthétique des qualités physiques clés du joueur.</p>
         </div>
       </div>
+      <div class="bubbles-row">
+        ${bubblesHtml}
+      </div>
+      ${detailHtml ? `<div class="metric-detail">${detailHtml}</div>` : ""}
     </div>
-    <div class="section-detail-body">
-      <div class="section-detail-chart">
-        <canvas id="${canvasId}" width="420" height="160"></canvas>
+  `;
+}
+
+function renderGpsSection(player) {
+  const metrics = player.gpsMetrics || {};
+  const bubblesHtml = Object.keys(metrics)
+    .map((key) => {
+      const m = metrics[key];
+      const isActive = activeGpsMetric === key;
+      return `
+        <button class="metric-bubble gps ${isActive ? "is-active" : ""}" data-gps-id="${key}">
+          <span>${m.label}</span>
+          <small>${m.lastValue} ${m.unit}</small>
+        </button>
+      `;
+    })
+    .join("");
+
+  const detailHtml = activeGpsMetric
+    ? renderMetricDetail("gps", metrics[activeGpsMetric])
+    : "";
+
+  return `
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-block">
+          <h3>GPS match / entraînement</h3>
+          <p>Charge externe récente sur les principaux indicateurs.</p>
+        </div>
       </div>
-      <div class="section-detail-table">
-        <table class="table-like">
+      <div class="bubbles-row">
+        ${bubblesHtml}
+      </div>
+      ${detailHtml ? `<div class="metric-detail">${detailHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderInjurySection(player) {
+  const injuries = player.injuries || [];
+  const bubblesHtml = injuries
+    .map((inj) => {
+      const isActive = activeInjuryMetric === inj.id;
+      return `
+        <button class="metric-bubble injury ${isActive ? "is-active" : ""}" data-injury-id="${inj.id}">
+          <span>${inj.label}</span>
+          <small>${inj.severite} · ${inj.zone}</small>
+        </button>
+      `;
+    })
+    .join("");
+
+  const activeInjury = injuries.find((i) => i.id === activeInjuryMetric);
+  const detailHtml = activeInjury ? renderInjuryDetail(activeInjury) : "";
+
+  return `
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-block">
+          <h3>Antécédents de blessure</h3>
+          <p>Vue rapide des blessures significatives et du parcours de rééducation.</p>
+        </div>
+      </div>
+      <div class="bubbles-row">
+        ${bubblesHtml}
+      </div>
+      ${detailHtml ? `<div class="metric-detail">${detailHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+// Rendu d'une métrique (GPS ou physique) : graphe + tableau historique
+function renderMetricDetail(type, metricObj) {
+  const canvasId = `${type}-chart`;
+  const tableRows = (metricObj.history || [])
+    .map((row) => {
+      return `<tr><td>${row.date}</td><td>${row.value}</td></tr>`;
+    })
+    .join("");
+
+  // Le canvas sera instancié après injection dans le DOM
+  setTimeout(() => {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    resetChart(type);
+    const labels = metricObj.history.map((h) => h.date);
+    const data = metricObj.history.map((h) => h.value);
+
+    chartsStore[type] = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: metricObj.label,
+            data,
+            tension: 0.25,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: true },
+          y: { display: true },
+        },
+      },
+    });
+  }, 0);
+
+  return `
+    <div class="metric-detail-header">
+      <div class="metric-detail-title">${metricObj.label}</div>
+      <div class="metric-detail-meta">Historique récent</div>
+    </div>
+    <div class="metric-detail-layout">
+      <div>
+        <canvas id="${canvasId}" height="120"></canvas>
+      </div>
+      <div>
+        <table class="metric-table">
           <thead>
-            <tr><th>Date</th><th>${label}</th></tr>
+            <tr><th>Date</th><th>Valeur</th></tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>
+            ${tableRows}
+          </tbody>
         </table>
       </div>
     </div>
   `;
-
-  const canvas = document.getElementById(canvasId);
-  if (canvas) {
-    drawSimpleLineChart(
-      canvas,
-      history.map((h) => ({ date: h.date, value: h[metricKey] })),
-      label
-    );
-  }
 }
 
-function drawFVProfile(canvas, data) {
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Rendu détail blessure (sans graphe, mais timeline + infos)
+function renderInjuryDetail(inj) {
+  const rows = (inj.history || [])
+    .map((step) => `<li>${step.date} – ${step.etape}</li>`)
+    .join("");
 
-  const padding = 24;
-  const w = canvas.width - padding * 2;
-  const h = canvas.height - padding * 2;
-
-  const fMax = data.imtp || 2500;
-  const vMax = data.vmax || 9;
-  const fRef = 3500;
-  const vRef = 10;
-
-  const fNorm = Math.min(fMax / fRef, 1.2);
-  const vNorm = Math.min(vMax / vRef, 1.2);
-
-  ctx.strokeStyle = "#cbd5f5";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding, padding);
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding + w, padding + h);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#e5e7eb";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding + w * 0.05, padding + h * 0.1);
-  ctx.lineTo(padding + w * 0.95, padding + h * 0.9);
-  ctx.stroke();
-
-  const x = padding + w * Math.min(vNorm, 1);
-  const y = padding + h * (1 - Math.min(fNorm, 1));
-
-  ctx.fillStyle = "#ff2e9a";
-  ctx.beginPath();
-  ctx.arc(x, y, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "10px system-ui";
-  ctx.fillText("Profil actuel", x + 6, y - 6);
-}
-
-// simple line chart générique
-function drawSimpleLineChart(canvas, series, label) {
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const padding = 24;
-  const w = canvas.width - padding * 2;
-  const h = canvas.height - padding * 2;
-
-  const vals = series.map((s) => s.value).filter((v) => v != null);
-  if (vals.length === 0) return;
-  const minV = Math.min(...vals);
-  const maxV = Math.max(...vals);
-
-  ctx.strokeStyle = "#cbd5f5";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding, padding);
-  ctx.moveTo(padding, padding + h);
-  ctx.lineTo(padding + w, padding + h);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#ff2e9a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  series.forEach((pt, idx) => {
-    const x = padding + (w * idx) / (series.length - 1 || 1);
-    const norm = (pt.value - minV) / (maxV - minV || 1);
-    const y = padding + h - norm * h;
-    if (idx === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = "#ff2e9a";
-  series.forEach((pt, idx) => {
-    const x = padding + (w * idx) / (series.length - 1 || 1);
-    const norm = (pt.value - minV) / (maxV - minV || 1);
-    const y = padding + h - norm * h;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "10px system-ui";
-  ctx.fillText(label, padding, padding - 6);
-}
-
-// ================== HELPER POUR DERNIERS TESTS PAR TYPE ==================
-
-function getLastTestsByType(joueurId, types) {
-  const result = {};
-  types.forEach((type) => {
-    const all = testsPhysiques
-      .filter((t) => t.joueurId === joueurId && t.type === type)
-      .sort((a, b) => (a.date > b.date ? -1 : 1)); // plus récent d'abord
-
-    if (!all.length) return;
-
-    result[type] = {
-      current: all[0],
-      previous: all.length > 1 ? all[1] : null,
-    };
-  });
-  return result;
-}
-
-// ================== TESTS DE COURSE ==================
-
-function renderRunningTestsSection(detail, joueur) {
-  const card = document.createElement("div");
-  card.className = "section-card open running-section";
-
-  const detailId = `running-detail-${joueur.id}`;
-  const lastTests = getLastTestsByType(joueur.id, ["Bonco", "Sprint 10m", "Sprint 30m"]);
-  const func = testsFonctionnels.find((t) => t.joueurId === joueur.id);
-  const vmax = func ? func.vmax : null;
-
-  const pills = [];
-
-  if (lastTests["Bonco"]) {
-    const { current, previous } = lastTests["Bonco"];
-    pills.push(`
-      <div class="metric-pill metric-pill-main" data-course="Bonco">
-        <span class="metric-label">Bonco</span>
-        <span class="metric-value">${current.valeur} ${current.unite}</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
-      </div>
-    `);
-  }
-  if (lastTests["Sprint 10m"]) {
-    const { current, previous } = lastTests["Sprint 10m"];
-    pills.push(`
-      <div class="metric-pill metric-pill-main" data-course="Sprint 10m">
-        <span class="metric-label">Sprint 10m</span>
-        <span class="metric-value">${current.valeur} s</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, false) : ""}
-      </div>
-    `);
-  }
-  if (lastTests["Sprint 30m"]) {
-    const { current, previous } = lastTests["Sprint 30m"];
-    pills.push(`
-      <div class="metric-pill metric-pill-main" data-course="Sprint 30m">
-        <span class="metric-label">Sprint 30m</span>
-        <span class="metric-value">${current.valeur} s</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, false) : ""}
-      </div>
-    `);
-  }
-  if (vmax != null) {
-    pills.push(`
-      <div class="metric-pill metric-pill-main" data-course="Vmax">
-        <span class="metric-label">Vitesse max</span>
-        <span class="metric-value">${vmax} m/s</span>
-      </div>
-    `);
-  }
-
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Tests de course</div>
-        <div class="section-title-sub">Énergétique & vitesse</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
+  return `
+    <div class="metric-detail-header">
+      <div class="metric-detail-title">${inj.type} – ${inj.zone}</div>
+      <div class="metric-detail-meta">${inj.dateDebut} → ${inj.dateRetour} · ${inj.impact}</div>
     </div>
-    <div class="section-summary">
-      <div class="metrics-row metrics-row-large">
-        ${
-          pills.length
-            ? pills.join("")
-            : "<div class='section-content'>Aucun test de course enregistré.</div>"
-        }
-      </div>
-    </div>
-    <div class="section-body">
-      <div id="${detailId}" class="section-detail-panel section-detail-empty">
-        <div class="section-detail-placeholder">
-          Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
-        </div>
-      </div>
+    <div class="rehab-timeline">
+      <strong>Notes :</strong> ${inj.notes || "Rien de particulier."}
+      <ul>
+        ${rows}
+      </ul>
     </div>
   `;
-  detail.appendChild(card);
-
-  const detailContainer = document.getElementById(detailId);
-
-  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
-    pill.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const metric = pill.getAttribute("data-course");
-      if (!detailContainer) return;
-
-      const currentMetric = detailContainer.getAttribute("data-active-metric");
-
-      // Si on re-clique sur la même bulle -> on rétracte
-      if (currentMetric === metric) {
-        card.querySelectorAll(".metric-pill-main").forEach((p) =>
-          p.classList.remove("metric-pill-active")
-        );
-        detailContainer.classList.add("section-detail-empty");
-        detailContainer.removeAttribute("data-active-metric");
-        detailContainer.innerHTML = `
-          <div class="section-detail-placeholder">
-            Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
-          </div>
-        `;
-        return;
-      }
-
-      // Sinon on ouvre / change de métrique
-      card.classList.add("open");
-      card.querySelectorAll(".metric-pill-main").forEach((p) =>
-        p.classList.remove("metric-pill-active")
-      );
-      pill.classList.add("metric-pill-active");
-      detailContainer.setAttribute("data-active-metric", metric);
-      renderRunningMetricHistory(joueur, metric, detailId);
-    });
-  });
 }
+// ================== RENDU ZONES ANATOMIQUES ================== 
 
-function renderRunningMetricHistory(joueur, metric, containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  // Cas Vmax: basé sur testsFonctionnels
-  if (metric === "Vmax") {
-    const hist = getFunctionalHistorySynthetic(joueur).map((h) => ({
-      date: h.date,
-      value: h.vmax,
-    }));
-    if (!hist.length) {
-      container.innerHTML = "<div class='section-content'>Pas de données Vmax.</div>";
-      return;
-    }
-
-    const values = hist.map((h) => h.value);
-    const max = Math.max(...values);
-    const last = values[values.length - 1];
-
-    const peers = testsFonctionnels
-      .map((t) => t.vmax)
-      .filter((v) => typeof v === "number");
-    const groupMean = peers.length
-      ? peers.reduce((a, b) => a + b, 0) / peers.length
-      : null;
-
-    const rows = hist
-      .map(
-        (h) => `
-        <tr>
-          <td>${h.date}</td>
-          <td>${h.value} m/s</td>
-        </tr>`
-      )
+function renderAnatomySection(player) {
+  const cardsHtml = ANATOMY_STRUCTURE.map((zone) => {
+    const chips = zone.tests
+      .map((testId) => {
+        const def = TEST_DEFINITION[testId];
+        if (!def) return "";
+        const isActive = activeTestId === testId;
+        return `
+          <button class="anatomy-test-chip ${isActive ? "is-active" : ""}" data-test-id="${testId}">
+            ${def.label.split("–").slice(-1)[0].trim()}
+          </button>
+        `;
+      })
       .join("");
 
-    const canvasId = `running-metric-canvas-${joueur.id}-vmax`;
-
-    container.classList.remove("section-detail-empty");
-    container.innerHTML = `
-      <div class="section-detail-header">
-        <div>
-          <div class="section-detail-title">Vitesse max (m/s)</div>
-          <div class="section-detail-sub">Historique de la Vmax</div>
-        </div>
-        <div class="section-detail-kpi">
-          <div class="section-detail-kpi-block">
-            <span class="info-label">Dernière valeur</span>
-            <span class="info-value">${last} m/s</span>
-          </div>
-          <div class="section-detail-kpi-block">
-            <span class="info-label">Meilleure perf</span>
-            <span class="info-value">${max} m/s</span>
-          </div>
-          <div class="section-detail-kpi-block">
-            <span class="info-label">Moyenne groupe</span>
-            <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
-          </div>
-        </div>
-      </div>
-      <div class="section-detail-body">
-        <div class="section-detail-chart">
-          <canvas id="${canvasId}" width="420" height="160"></canvas>
-        </div>
-        <div class="section-detail-table">
-          <table class="table-like">
-            <thead><tr><th>Date</th><th>Vmax (m/s)</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
+    return `
+      <div class="anatomy-card">
+        <div class="anatomy-card-title">${zone.title}</div>
+        <div class="anatomy-tests">
+          ${chips}
         </div>
       </div>
     `;
+  }).join("");
 
-    const canvas = document.getElementById(canvasId);
-    if (canvas) drawSimpleLineChart(canvas, hist, "Vmax (m/s)");
-    return;
-  }
+  const detailHtml = renderTestDetail(player);
 
-  // Autres tests (Bonco, Sprint 10, Sprint 30) basés sur testsPhysiques
-  const all = testsPhysiques
-    .filter((t) => t.joueurId === joueur.id && t.type === metric)
-    .sort((a, b) => (a.date > b.date ? 1 : -1));
-
-  if (!all.length) {
-    container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
-    return;
-  }
-
-  const series = all.map((t) => ({ date: t.date, value: t.ratio }));
-  const values = series.map((s) => s.value);
-  const max = Math.max(...values);
-  const last = values[values.length - 1];
-
-  const peers = testsPhysiques.filter((t) => t.type === metric);
-  const peerRatios = peers.map((p) => p.ratio).filter((v) => typeof v === "number");
-  const groupMean = peerRatios.length
-    ? peerRatios.reduce((a, b) => a + b, 0) / peerRatios.length
-    : null;
-
-  const rows = all
-    .map(
-      (t) => `
-      <tr>
-        <td>${t.date}</td>
-        <td>${t.valeur} ${t.unite}</td>
-        <td>${t.ratio}</td>
-      </tr>`
-    )
-    .join("");
-
-  const canvasId = `running-metric-canvas-${joueur.id}-${metric.replace(/\s/g, "")}`;
-
-  container.classList.remove("section-detail-empty");
-  container.innerHTML = `
-    <div class="section-detail-header">
-      <div>
-        <div class="section-detail-title">${metric}</div>
-        <div class="section-detail-sub">Ratio de performance (normalisé à la référence)</div>
-      </div>
-      <div class="section-detail-kpi">
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Dernier ratio</span>
-          <span class="info-value">${last}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Meilleur ratio</span>
-          <span class="info-value">${max}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Moyenne groupe</span>
-          <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
-        </div>
-      </div>
-    </div>
-    <div class="section-detail-body">
-      <div class="section-detail-chart">
-        <canvas id="${canvasId}" width="420" height="160"></canvas>
-      </div>
-      <div class="section-detail-table">
-        <table class="table-like">
-          <thead><tr><th>Date</th><th>Valeur</th><th>Ratio</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  const canvas = document.getElementById(canvasId);
-  if (canvas) {
-    drawSimpleLineChart(canvas, series, `${metric} (ratio)`);
-  }
-}
-
-// ================== TESTS DE SAUT ==================
-
-function renderJumpTestsSection(detail, joueur) {
-  const card = document.createElement("div");
-  card.className = "section-card open jump-section";
-
-  const detailId = `jump-detail-${joueur.id}`;
-  const lastTests = getLastTestsByType(joueur.id, ["CMJ", "Squat Jump", "Single Hop", "Triple Hop"]);
-
-  const pills = [];
-  const pushPill = (type, label) => {
-    if (!lastTests[type]) return;
-    const { current, previous } = lastTests[type];
-    pills.push(`
-      <div class="metric-pill metric-pill-main" data-jump="${type}">
-        <span class="metric-label">${label}</span>
-        <span class="metric-value">${current.valeur} ${current.unite}</span>
-        ${previous ? buildPerfTrendIcon(current.valeur, previous.valeur, true) : ""}
-      </div>
-    `);
-  };
-
-  pushPill("CMJ", "CMJ");
-  pushPill("Squat Jump", "Squat Jump");
-  pushPill("Single Hop", "Single Hop");
-  pushPill("Triple Hop", "Triple Hop");
-
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Tests de saut</div>
-        <div class="section-title-sub">CMJ · Squat Jump · Single / Triple Hop</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="metrics-row metrics-row-large">
-        ${
-          pills.length
-            ? pills.join("")
-            : "<div class='section-content'>Aucun test de saut enregistré.</div>"
-        }
-      </div>
-    </div>
-    <div class="section-body">
-      <div id="${detailId}" class="section-detail-panel section-detail-empty">
-        <div class="section-detail-placeholder">
-          Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-
-  const detailContainer = document.getElementById(detailId);
-
-  card.querySelectorAll(".metric-pill-main").forEach((pill) => {
-    pill.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const metric = pill.getAttribute("data-jump");
-      if (!detailContainer) return;
-
-      const currentMetric = detailContainer.getAttribute("data-active-metric");
-
-      // Si on re-clique sur la même bulle -> on rétracte
-      if (currentMetric === metric) {
-        card.querySelectorAll(".metric-pill-main").forEach((p) =>
-          p.classList.remove("metric-pill-active")
-        );
-        detailContainer.classList.add("section-detail-empty");
-        detailContainer.removeAttribute("data-active-metric");
-        detailContainer.innerHTML = `
-          <div class="section-detail-placeholder">
-            Clique sur une bulle pour afficher l'historique complet et la comparaison groupe.
-          </div>
-        `;
-        return;
-      }
-
-      // Sinon on ouvre / change de métrique
-      card.classList.add("open");
-      card.querySelectorAll(".metric-pill-main").forEach((p) =>
-        p.classList.remove("metric-pill-active")
-      );
-      pill.classList.add("metric-pill-active");
-      detailContainer.setAttribute("data-active-metric", metric);
-      renderJumpMetricHistory(joueur, metric, detailId);
-    });
-  });
-}
-
-function renderJumpMetricHistory(joueur, metric, containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  const all = testsPhysiques
-    .filter((t) => t.joueurId === joueur.id && t.type === metric)
-    .sort((a, b) => (a.date > b.date ? 1 : -1));
-
-  if (!all.length) {
-    container.innerHTML = "<div class='section-content'>Pas de données pour ce test.</div>";
-    return;
-  }
-
-  const series = all.map((t) => ({ date: t.date, value: t.ratio }));
-  const values = series.map((s) => s.value);
-  const max = Math.max(...values);
-  const last = values[values.length - 1];
-
-  const peers = testsPhysiques.filter((t) => t.type === metric);
-  const peerRatios = peers.map((p) => p.ratio).filter((v) => typeof v === "number");
-  const groupMean = peerRatios.length
-    ? peerRatios.reduce((a, b) => a + b, 0) / peerRatios.length
-    : null;
-
-  const rows = all
-    .map(
-      (t) => `
-      <tr>
-        <td>${t.date}</td>
-        <td>${t.cote || "-"}</td>
-        <td>${t.valeur} ${t.unite}</td>
-        <td>${t.ratio}</td>
-      </tr>`
-    )
-    .join("");
-
-  const canvasId = `jump-metric-canvas-${joueur.id}-${metric.replace(/\s/g, "")}`;
-
-  container.classList.remove("section-detail-empty");
-  container.innerHTML = `
-    <div class="section-detail-header">
-      <div>
-        <div class="section-detail-title">${metric}</div>
-        <div class="section-detail-sub">Ratio de performance (normalisé à la référence)</div>
-      </div>
-      <div class="section-detail-kpi">
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Dernier ratio</span>
-          <span class="info-value">${last}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Meilleur ratio</span>
-          <span class="info-value">${max}</span>
-        </div>
-        <div class="section-detail-kpi-block">
-          <span class="info-label">Moyenne groupe</span>
-          <span class="info-value">${groupMean ? groupMean.toFixed(2) : "-"}</span>
-        </div>
-      </div>
-    </div>
-    <div class="section-detail-body">
-      <div class="section-detail-chart">
-        <canvas id="${canvasId}" width="420" height="160"></canvas>
-      </div>
-      <div class="section-detail-table">
-        <table class="table-like">
-          <thead><tr><th>Date</th><th>Côté</th><th>Valeur</th><th>Ratio</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  const canvas = document.getElementById(canvasId);
-  if (canvas) {
-    drawSimpleLineChart(canvas, series, `${metric} (ratio)`);
-  }
-}
-
-// ================== PROFIL FORCE / VITESSE (CARTE DEDIEE) ==================
-
-function renderForceVelocitySection(detail, joueur) {
-  const data = testsFonctionnels.find((t) => t.joueurId === joueur.id);
-  if (!data) return;
-  const canvasId = `fv-card-canvas-${joueur.id}`;
-
-  const card = document.createElement("div");
-  card.className = "section-card open";
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Profil force / vitesse</div>
-        <div class="section-title-sub">Synthèse F-V</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="section-canvas-wrapper">
-        <canvas id="${canvasId}" width="420" height="140"></canvas>
-      </div>
-    </div>
-    <div class="section-body">
-      <div class="info-card">
-        <div class="info-label">Détail</div>
-        <div class="section-content">
-          Profil basé sur IMTP (force max) et Vmax (vitesse max). Utilise-le pour suivre le profil F-V dans le temps lors des campagnes de tests.
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-
-  const canvas = card.querySelector(`#${canvasId}`);
-  if (canvas) {
-    drawFVProfile(canvas, data);
-  }
-}
-
-// ================== ZONES ANATOMIQUES & TESTS ==================
-
-const anatomicalConfig = {
-  "Tête": ["Cognition réaction"],
-  "Rachis cervical": ["Isométrie rachis cervical"],
-  "Épaule": ["ASH test"],
-  "Lombaire": ["Extension lombaire iso"],
-  "Hanche": ["CMJ", "Squat Jump"],
-  "Genou": ["Isocinétique quadriceps", "McCall", "Single Hop", "Triple Hop"],
-  "Cheville": ["KTW"],
-  "Ischio": ["NordBoard"],
-  "Course": ["Sprint 10m", "Sprint 30m", "Bonco"],
-};
-
-function renderAnatomicalZonesSection(detail, joueur) {
-  const card = document.createElement("div");
-  card.className = "section-card open";
-  const tests = testsPhysiques.filter((t) => t.joueurId === joueur.id);
-
-  const zonesHtml = Object.entries(anatomicalConfig)
-    .map(([seg, expectedTests]) => {
-      const hasTests = tests.some((t) => t.segment === seg || expectedTests.includes(t.type));
-      const cls = hasTests ? "segment-tab active" : "segment-tab";
-      return `<button type="button" class="${cls}" data-seg="${seg}">${seg}</button>`;
-    })
-    .join("");
-
-  const tableContainerId = `zones-tests-${joueur.id}`;
-  const detailContainerId = `zones-detail-${joueur.id}`;
-
-  card.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Zones anatomiques & tests</div>
-        <div class="section-title-sub">Sélectionne une zone pour voir les derniers tests</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="segment-tabs">
-        ${zonesHtml}
-      </div>
-      <div id="${tableContainerId}" class="section-content" style="margin-top:8px;">
-        Sélectionne une zone anatomique pour afficher les tests associés.
-      </div>
-    </div>
-    <div class="section-body">
-      <div class="info-card">
-        <div class="info-label">Détail test sélectionné</div>
-        <div id="${detailContainerId}" class="section-content" style="margin-top:6px;font-size:0.8rem;color:#6b7280;">
-          Clique sur une ligne de test pour voir l'évolution, l'asymétrie et la comparaison au groupe.
-        </div>
-      </div>
-    </div>
-  `;
-  detail.appendChild(card);
-
-  const tabs = card.querySelectorAll(".segment-tab");
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", (e) => {
-      e.stopPropagation();
-      tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      const seg = tab.getAttribute("data-seg");
-      renderZoneTestsTable(joueur, seg, tableContainerId, detailContainerId);
-    });
-  });
-
-  // zone par défaut
-  const defaultSeg = "Hanche";
-  renderZoneTestsTable(joueur, defaultSeg, tableContainerId, detailContainerId);
-}
-
-function renderZoneTestsTable(joueur, segment, tableContainerId, detailContainerId) {
-  const container = document.getElementById(tableContainerId);
-  if (!container) return;
-
-  let tests = testsPhysiques
-    .filter(
-      (t) =>
-        t.joueurId === joueur.id &&
-        (t.segment === segment || (anatomicalConfig[segment] || []).includes(t.type))
-    )
-    .sort((a, b) => (a.date > b.date ? -1 : 1));
-
-  if (!tests.length) {
-    container.innerHTML = "<div class='section-content'>Aucun test enregistré pour cette zone.</div>";
-    return;
-  }
-
-  // Ne garder que le dernier test par type / côté
-  const map = {};
-  tests.forEach((t) => {
-    const key = `${t.type}-${t.cote || "-"}`;
-    if (!map[key]) map[key] = t;
-  });
-  const latestTests = Object.values(map);
-
-  const rows = latestTests
-    .map((t) => {
-      return `
-      <tr data-test-id="${t.id}">
-        <td>${t.date}</td>
-        <td>${t.type}</td>
-        <td>${t.cote || "-"}</td>
-        <td>${t.valeur} ${t.unite}</td>
-        <td>${t.ratio}</td>
-        <td><span class="${getZoneClass(t.zone)}"></span></td>
-      </tr>`;
-    })
-    .join("");
-
-  container.innerHTML = `
-    <table class="table-like">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Test</th>
-          <th>Côté</th>
-          <th>Valeur</th>
-          <th>Ratio</th>
-          <th>Zone</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-    </table>
-  `;
-
-  container.querySelectorAll("tbody tr").forEach((row) => {
-    row.addEventListener("click", () => {
-      const id = row.getAttribute("data-test-id");
-      renderTestDetailAdvanced(joueur, id, detailContainerId);
-    });
-  });
-}
-
-// ================== DETAIL TEST AVANCE (ASYM, GROUPE, GOLD) ==================
-
-function renderTestDetailAdvanced(joueur, testId, containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  const test = testsPhysiques.find((t) => t.id === testId);
-  if (!test) {
-    container.innerHTML = "";
-    return;
-  }
-
-  // même type pour l'historique
-  const sameTypeAll = testsPhysiques
-    .filter((t) => t.joueurId === joueur.id && t.type === test.type)
-    .sort((a, b) => (a.date > b.date ? 1 : -1));
-
-  // même type + côté pour tendance
-  const sameSide = sameTypeAll.filter((t) => t.cote === test.cote || test.cote === "-");
-
-  // asy D/G si applicable
-  const sameDate = sameTypeAll.filter((t) => t.date === test.date);
-  let droite = null;
-  let gauche = null;
-  sameDate.forEach((t) => {
-    if (t.cote === "Droit") droite = t;
-    if (t.cote === "Gauche") gauche = t;
-  });
-
-  let asymHtml = "";
-  if (droite && gauche) {
-    const diff =
-      (Math.abs(droite.valeur - gauche.valeur) / Math.max(droite.valeur, gauche.valeur)) * 100;
-    let cls = "asym-green";
-    if (diff > 15) cls = "asym-red";
-    else if (diff > 10) cls = "asym-orange";
-    asymHtml = `<span class="${cls}">Asymétrie D/G : ${diff.toFixed(1)}%</span>`;
-  }
-
-  // comparaison groupe (tous joueurs)
-  const peers = testsPhysiques.filter(
-    (t) => t.type === test.type && t.segment === test.segment && t.cote === test.cote
-  );
-  let groupHtml = "";
-  if (peers.length) {
-    const meanRatio = peers.reduce((acc, t) => acc + (t.ratio || 0), 0) / peers.length;
-    const ratio = test.ratio || 0;
-    const lowerBetter = isLowerBetter(test.type);
-    let deltaPercent = ((ratio - meanRatio) / meanRatio) * 100;
-    if (lowerBetter) deltaPercent *= -1; // si plus bas = mieux, on inverse
-    let cls = "asym-green";
-    if (deltaPercent < -5) cls = "asym-red";
-    else if (Math.abs(deltaPercent) <= 5) cls = "asym-orange";
-    groupHtml = `<span class="${cls}">Par rapport au groupe : ${
-      deltaPercent >= 0 ? "+" : ""
-    }${deltaPercent.toFixed(1)}%</span>`;
-  }
-
-  // Gold : meilleure perf du groupe
-  let goldHtml = "";
-  if (peers.length) {
-    const lowerBetter = isLowerBetter(test.type);
-    let best = peers[0];
-    peers.forEach((p) => {
-      if (!lowerBetter) {
-        if (p.ratio > best.ratio) best = p;
-      } else {
-        if (p.ratio < best.ratio) best = p;
-      }
-    });
-    if (best.id === test.id) {
-      goldHtml = `<span class="badge-gold">Top équipe</span>`;
-    }
-  }
-
-  // tendance sur le ratio
-  let trendHtml = "";
-  if (sameSide.length > 1) {
-    const idx = sameSide.findIndex((t) => t.id === test.id);
-    if (idx > 0) {
-      const prev = sameSide[idx - 1];
-      const current = test.ratio;
-      const previous = prev.ratio;
-      const lowerBetter = isLowerBetter(test.type);
-      let trendClass = "trend-neutral";
-      let trendIcon = "→";
-      let text = "Stable";
-
-      if (!lowerBetter) {
-        if (current > previous) {
-          trendClass = "trend-up";
-          trendIcon = "↑";
-          text = "En amélioration";
-        } else if (current < previous) {
-          trendClass = "trend-down";
-          trendIcon = "↓";
-          text = "En baisse";
-        }
-      } else {
-        if (current < previous) {
-          trendClass = "trend-up";
-          trendIcon = "↑";
-          text = "En amélioration";
-        } else if (current > previous) {
-          trendClass = "trend-down";
-          trendIcon = "↓";
-          text = "En baisse";
-        }
-      }
-
-      trendHtml = `<span class="${trendClass}">${trendIcon} ${text}</span>`;
-    }
-  }
-
-  // ratio poids de corps
-  let bwHtml = "";
-  const joueurData = joueurs.find((j) => j.id === joueur.id);
-  if (joueurData && ["N", "kg"].includes(test.unite)) {
-    const bwRatio = joueurData.poids ? test.valeur / joueurData.poids : null;
-    if (bwRatio != null) {
-      bwHtml = `<div class="info-label">Ratio / poids de corps</div>
-        <div class="info-value">${bwRatio.toFixed(2)} x BW</div>`;
-    }
-  }
-
-  const canvasId = `test-advanced-canvas-${joueur.id}`;
-  container.innerHTML = `
-    <div class="test-detail-header">
-      <div>
-        <div class="test-detail-title">${test.type} · ${test.segment}</div>
-        <div class="test-detail-sub">Date : ${test.date} · Côté : ${test.cote || "-"}</div>
-      </div>
-      <div class="test-detail-sub">
-        Ratio : ${test.ratio ?? "-"} ${trendHtml} ${goldHtml}
-      </div>
-    </div>
-    <div class="test-detail-grid">
-      <div class="info-card">
-        <div class="info-label">Valeur actuelle</div>
-        <div class="info-value">${test.valeur} ${test.unite}</div>
-      </div>
-      <div class="info-card">
-        <div class="info-label">Référence</div>
-        <div class="info-value">${test.ref ?? "-"} ${test.unite}</div>
-      </div>
-      <div class="info-card">
-        <div class="info-label">Zone</div>
-        <div class="info-value"><span class="${getZoneClass(
-          test.zone
-        )}"></span> ${test.zone || "-"}</div>
-      </div>
-      <div class="info-card">
-        ${bwHtml || "<div class='info-label'>Ratio / poids de corps</div><div class='info-value'>-</div>"}
-      </div>
-    </div>
-    <div class="test-badge-row">
-      ${asymHtml}
-      ${groupHtml}
-    </div>
-    <div class="functional-canvas-wrapper" style="margin-top:8px;">
-      <canvas id="${canvasId}" width="420" height="130"></canvas>
-    </div>
-  `;
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-
-  if (sameTypeAll.length <= 1) {
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "10px system-ui";
-    ctx.fillText("Pas assez de mesures pour une courbe d'évolution.", 10, 20);
-    return;
-  }
-
-  drawSimpleLineChart(
-    canvas,
-    sameTypeAll.map((t) => ({ date: t.date, value: t.ratio })),
-    `${test.type} (ratio)`
-  );
-}
-
-// ================== REEDUCATION (Joueurs blessés uniquement) ==================
-
-function renderBlessureSection(detail, joueur) {
-  const blessureSection = document.createElement("div");
-  blessureSection.className = "section-card open";
-
-  const blessureList = blessures
-    .filter((b) => b.joueurId === joueur.id)
-    .sort((a, b) => (a.dateBlessure > b.dateBlessure ? -1 : 1));
-
-  if (blessureList.length === 0) {
-    blessureSection.innerHTML = `
+  return `
+    <div class="section-card">
       <div class="section-header">
-        <div class="section-header-left">
-          <div class="section-title-main">Rééducation</div>
-          <div class="section-title-sub">Aucune blessure en cours</div>
-        </div>
-        <div class="section-toggle-icon">▶</div>
-      </div>
-      <div class="section-summary">
-        <div class="section-content">Aucune blessure active pour ce joueur.</div>
-      </div>
-    `;
-    detail.appendChild(blessureSection);
-    return;
-  }
-
-  const blessure = blessureList[0];
-  const phaseClass = getPhaseClass(blessure.phase);
-  const today = new Date();
-  const d0 = new Date(blessure.dateBlessure);
-  const dRtt = blessure.rttEstimee ? new Date(blessure.rttEstimee) : null;
-  let progress = 0;
-  if (dRtt && dRtt > d0) {
-    const total = dRtt - d0;
-    const done = Math.min(Math.max(today - d0, 0), total);
-    progress = Math.round((done / total) * 100);
-  }
-
-  const historyId = `rehab-history-${joueur.id}`;
-
-  blessureSection.innerHTML = `
-    <div class="section-header">
-      <div class="section-header-left">
-        <div class="section-title-main">Rééducation</div>
-        <div class="section-title-sub">${blessure.diagnostic} · cliquez pour voir le calendrier</div>
-      </div>
-      <div class="section-toggle-icon">▶</div>
-    </div>
-    <div class="section-summary">
-      <div class="two-columns">
-        <div class="info-card">
-          <div class="info-label">Pathologie</div>
-          <div class="info-value">${blessure.diagnostic}</div>
-          <div class="info-label" style="margin-top:4px;">Localisation</div>
-          <div class="info-value">${blessure.localisation}</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">Dates clés</div>
-          <div class="info-value">
-            Début : ${blessure.dateBlessure}<br/>
-            RTT estimée : ${blessure.rttEstimee || "-"}<br/>
-            RTP estimée : ${blessure.rtpEstimee || "-"}
-          </div>
-          <div class="info-label" style="margin-top:4px;">Phase</div>
-          <div class="info-value"><span class="${phaseClass}">${blessure.phase}</span></div>
+        <div class="section-title-block">
+          <h3>Zones anatomiques &amp; tests spécifiques</h3>
+          <p>Correspondance claire entre articulation et tests réalisés.</p>
         </div>
       </div>
-      <div class="progress-container">
-        <div class="info-label">Progression vers RTT</div>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${progress}%;"></div>
-          <div class="progress-marks">
-            <span class="progress-mark"></span>
-            <span class="progress-mark"></span>
-            <span class="progress-mark"></span>
-            <span class="progress-mark"></span>
-          </div>
+      <div class="anatomy-layout">
+        <div class="anatomy-map">
+          ${cardsHtml}
         </div>
-        <div class="progress-text">${progress}% du protocole réalisé (objectif RTT = 100%)</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <button type="button" class="subtoggle" data-target="${historyId}">Voir le calendrier détaillé</button>
-      <div id="${historyId}" class="section-body-details">
-        ${renderRehabCalendarHtml(blessure)}
-        ${renderRehabSessionsHtml(blessure)}
+        <div class="anatomy-detail" id="anatomyDetail">
+          ${detailHtml}
+        </div>
       </div>
     </div>
   `;
-  detail.appendChild(blessureSection);
 }
 
-function renderRehabCalendarHtml(blessure) {
-  const protocoleWeeks = blessure.protocole
-    ? Object.entries(blessure.protocole).map(([key, text]) => ({ key, text }))
-    : [];
-  if (!protocoleWeeks.length) {
-    return `<div class="section-content">Protocole détaillé non renseigné.</div>`;
+// Détail d'un test sélectionné (D/G, % poids de corps, position vs groupe)
+function renderTestDetail(player) {
+  if (!activeTestId) {
+    return `<div style="font-size:12px;color:#6b7280;">
+      Sélectionne un test dans la carte de gauche pour afficher le détail (droite/gauche, % poids de corps, comparaison groupe).
+    </div>`;
   }
 
-  const start = new Date(blessure.dateBlessure);
-  const formatter = new Intl.DateTimeFormat("fr-FR");
-  const weeksHtml = protocoleWeeks
-    .map((w, idx) => {
-      const s = new Date(start);
-      s.setDate(s.getDate() + idx * 7);
-      const e = new Date(s);
-      e.setDate(e.getDate() + 6);
-      return `
-        <div class="calendar-week">
-          <div class="calendar-week-title">Semaine ${idx + 1} (${formatter.format(
-        s
-      )} - ${formatter.format(e)})</div>
-          <div class="calendar-week-content">${w.text}</div>
+  const values = player.tests[activeTestId];
+  const def = TEST_DEFINITION[activeTestId];
+  if (!values || !def) {
+    return `<div style="font-size:12px;color:#6b7280;">Pas de données pour ce test.</div>`;
+  }
+
+  const { left, right } = values;
+  const avgSide = (left + right) / 2;
+  const diff = computeSideDiff(left, right);
+  const relLeft = computeRelativeToBodyWeight(left, player.poids);
+  const relRight = computeRelativeToBodyWeight(right, player.poids);
+  const vsTeam = classifyVsTeam(avgSide, activeTestId);
+
+  // graphe petit historique fictif basé sur valeurs statiques (ici juste 3 points)
+  const canvasId = "test-chart";
+  setTimeout(() => {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    resetChart("test");
+    const labels = ["-2 mois", "-1 mois", "Actuel"];
+    const base = avgSide * 0.95;
+    chartsStore.test = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: def.label,
+            data: [base, avgSide * 0.98, avgSide],
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: true },
+          y: { display: true },
+        },
+      },
+    });
+  }, 0);
+
+  return `
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px;">
+      ${def.label}
+    </div>
+    <div class="test-metrics-grid">
+      <div class="test-metric-block">
+        <div class="test-metric-label">Droite / Gauche</div>
+        <div class="test-metric-value">${right} / ${left}</div>
+      </div>
+      <div class="test-metric-block">
+        <div class="test-metric-label">Différence D/G</div>
+        <div class="test-metric-value">${diff.diffAbs.toFixed(2)} (${diff.diffPct.toFixed(1)}%)</div>
+      </div>
+      <div class="test-metric-block">
+        <div class="test-metric-label">% poids de corps (approx.)</div>
+        <div class="test-metric-value">
+          D: ${relRight ? relRight.toFixed(2) : "–"} / G: ${relLeft ? relLeft.toFixed(2) : "–"}
         </div>
+      </div>
+    </div>
+    <div class="test-metric-block" style="margin-top:6px;">
+      <div class="test-metric-label">Position vs moyenne du groupe</div>
+      <div class="test-metric-value">
+        <span class="tests-summary-chip ${vsTeam.className}">${vsTeam.label}</span>
+      </div>
+    </div>
+    <div style="margin-top:8px;">
+      <canvas id="${canvasId}" height="110"></canvas>
+    </div>
+  `;
+}
+
+// ================== SYNTHÈSE DE TOUS LES TESTS ================== 
+
+function renderTestsSummarySection(player) {
+  const rowsHtml = Object.keys(player.tests || {})
+    .map((testId) => {
+      const def = TEST_DEFINITION[testId];
+      if (!def) return "";
+      const v = player.tests[testId];
+      const { left, right } = v;
+      const avgSide = (left + right) / 2;
+      const diff = computeSideDiff(left, right);
+      const vsTeam = classifyVsTeam(avgSide, testId);
+
+      return `
+        <tr>
+          <td>${def.zone}</td>
+          <td>${def.label}</td>
+          <td>${right}</td>
+          <td>${left}</td>
+          <td>${diff.diffAbs.toFixed(2)} (${diff.diffPct.toFixed(1)}%)</td>
+          <td>${avgSide.toFixed(2)}</td>
+          <td><span class="tests-summary-chip ${vsTeam.className}">${vsTeam.label}</span></td>
+        </tr>
       `;
     })
     .join("");
 
   return `
-    <div class="rehab-agenda">
-      <div class="rehab-agenda-header">
-        <div class="rehab-week-label">Calendrier de rééducation</div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-block">
+          <h3>Synthèse des tests</h3>
+          <p>Vue globale des tests spécifiques avec asymétries et comparaison groupe.</p>
+        </div>
       </div>
-      <div class="rehab-agenda-days">
-        ${weeksHtml}
+      <div class="tests-summary-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Zone</th>
+              <th>Test</th>
+              <th>D</th>
+              <th>G</th>
+              <th>Diff D/G</th>
+              <th>Moy. joueur</th>
+              <th>Vs groupe</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
       </div>
     </div>
   `;
 }
+// ================== COMPOSITION DETAIL JOUEUR ================== 
 
-function renderRehabSessionsHtml(blessure) {
-  const seancesBlessure = seances.filter((s) => s.blessureId === blessure.id);
-  if (!seancesBlessure.length) {
-    return `<div class="info-card" style="margin-top:8px;">
-      <div class="info-label">Séances de rééducation</div>
-      <div class="section-content">Aucune séance renseignée pour le moment.</div>
-    </div>`;
-  }
-  const rows = seancesBlessure
-    .map(
-      (s) => `
-      <tr>
-        <td>${s.date}</td>
-        <td>${s.type}</td>
-        <td>${s.resume}</td>
-        <td>${s.rpe}</td>
-        <td>${s.tolerance}</td>
-      </tr>`
-    )
-    .join("");
-  return `
-    <div class="info-card" style="margin-top:8px;">
-      <div class="info-label">Séances de rééducation</div>
-      <table class="table-like" style="margin-top:4px;">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Contenu</th>
-            <th>RPE</th>
-            <th>Tolérance</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-}
+function renderPlayerDetail(player) {
+  const container = document.getElementById("playerDetail");
+  if (!container) return;
 
-// ================== INIT ==================
-
-function init() {
-  renderStats();
-  renderPlayersList();
-
-  const select = document.getElementById("filterSelect");
-  select.addEventListener("change", () => {
-    renderPlayersList();
-    const detail = document.getElementById("playerDetail");
-    detail.innerHTML = `
-      <div class="empty-welcome">
-        <img src="Image/SFP.png" class="empty-logo" alt="Logo Stade Français">
+  if (!player) {
+    container.classList.add("empty-state");
+    container.innerHTML = `
+      <div class="empty-card">
         <h2 class="empty-title">U21 Stade Français Paris</h2>
         <p class="empty-subtitle">Centre de suivi – Performance &amp; Médecine</p>
-        <p class="empty-hint">Sélectionne un joueur dans la liste pour commencer.</p>
+        <p class="empty-hint">Sélectionne un joueur dans la liste pour afficher son profil complet.</p>
       </div>
     `;
+    return;
+  }
+
+  container.classList.remove("empty-state");
+
+  const headerHtml = renderPlayerHeader(player);
+  const physicalHtml = renderPhysicalSection(player);
+  const gpsHtml = renderGpsSection(player);
+  const injuryHtml = renderInjurySection(player);
+  const anatomyHtml = renderAnatomySection(player);
+  const summaryHtml = renderTestsSummarySection(player);
+
+  container.innerHTML = `
+    ${headerHtml}
+    <div class="sections-grid">
+      <div>
+        ${physicalHtml}
+        ${gpsHtml}
+      </div>
+      <div>
+        ${injuryHtml}
+        ${anatomyHtml}
+      </div>
+    </div>
+    ${summaryHtml}
+  `;
+
+  // Event delegation pour les bulles et chips (on rebinde à chaque rendu)
+  bindDetailEvents(player);
+}
+
+// ================== BIND DES EVENTS ================== 
+
+function bindDetailEvents(player) {
+  const detail = document.getElementById("playerDetail");
+  if (!detail) return;
+
+  // Bulles physiques
+  detail.querySelectorAll(".metric-bubble.physical").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activePhysicalMetric = btn.getAttribute("data-physical-id");
+      renderPlayerDetail(player);
+    });
   });
 
+  // Bulles GPS
+  detail.querySelectorAll(".metric-bubble.gps").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeGpsMetric = btn.getAttribute("data-gps-id");
+      renderPlayerDetail(player);
+    });
+  });
+
+  // Bulles blessures
+  detail.querySelectorAll(".metric-bubble.injury").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeInjuryMetric = btn.getAttribute("data-injury-id");
+      renderPlayerDetail(player);
+    });
+  });
+
+  // Chips tests anatomiques
+  detail.querySelectorAll(".anatomy-test-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeTestId = btn.getAttribute("data-test-id");
+      renderPlayerDetail(player);
+    });
+  });
+}
+
+// ================== INIT & EVENTS GLOBAUX ================== 
+
+function initFilters() {
+  // Filtres ligne
+  document.querySelectorAll("[data-filter-line]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-filter-line]").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      currentLineFilter = btn.getAttribute("data-filter-line");
+      renderPlayersList();
+    });
+  });
+
+  // Filtres dispo
+  document.querySelectorAll("[data-filter-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-filter-status]").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      currentStatusFilter = btn.getAttribute("data-filter-status");
+      renderPlayersList();
+    });
+  });
+
+  // Recherche
   const searchInput = document.getElementById("searchInput");
   if (searchInput) {
     searchInput.addEventListener("input", () => {
@@ -2834,6 +1051,11 @@ function init() {
       renderPlayersList();
     });
   }
+}
+
+function init() {
+  initFilters();
+  renderPlayersList();
 }
 
 document.addEventListener("DOMContentLoaded", init);
